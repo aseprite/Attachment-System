@@ -10,6 +10,7 @@ local title = "Attachment Window"
 local observedSprite
 local activeLayer
 local shrunkenBounds = {}
+local imi = dofile('./imi.lua')
 
 local function Sprite_change()
   -- TODO
@@ -42,6 +43,53 @@ local function calculate_shrunken_bounds(tilemapLayer)
   return bounds
 end
 
+local function imi_ongui()
+  local spr = app.activeSprite
+  if not spr then
+    dlg:modify{ title=title }
+    imi.label("No sprite")
+  else
+    dlg:modify{ title=title .. " - " .. app.fs.fileTitle(spr.filename) }
+    imi.label("Sprite: " .. spr.filename)
+    if activeLayer then
+      imi.label("Layer: " .. activeLayer.name)
+      imi.newLine = true
+
+      local inRc = shrunkenBounds
+      local outSize = Size(128, 128)
+      if inRc.width < outSize.width and
+        inRc.height < outSize.height then
+        outSize = Size(inRc.width, inRc.height)
+      elseif inRc.width > inRc.height then
+        outSize.height = outSize.width * inRc.height / inRc.width
+      else
+        outSize.width = outSize.height * inRc.width / inRc.height
+      end
+
+      local ts = activeLayer.tileset
+      local cel = activeLayer:cel(app.activeFrame)
+      if cel and cel.image then
+        local tile = cel.image:getPixel(0, 0)
+        local tileImg = ts:getTile(tile)
+        imi.image(tileImg, inRc, outSize)
+        imi.newLine = false
+      end
+
+      local ntiles = #ts
+
+      imi.beginViewport(Size(imi.ctx.width - imi.cursor.x,
+                             outSize.height))
+      for i=1,ntiles do
+        imi.pushID(i)
+        local tileImg = ts:getTile(i)
+        imi.image(tileImg, inRc, outSize)
+        imi.popID()
+      end
+      imi.endViewport()
+    end
+  end
+end
+
 -- When the active site (active sprite, cel, frame, etc.) changes this
 -- function will be called.
 local function App_sitechange(ev)
@@ -67,64 +115,6 @@ local function App_sitechange(ev)
   dlg:repaint()
 end
 
-local function Canvas_onpaint(ev)
-  local ctx = ev.context
-  local spr = app.activeSprite
-  if not spr then
-    dlg:modify{ title=title }
-    ctx:fillText("No sprite", 0, 0)
-  else
-    dlg:modify{ title=title .. " - " .. app.fs.fileTitle(spr.filename) }
-    local sz = ctx:measureText(" ")
-    local h = sz.height
-
-    ctx:fillText("Sprite: " .. spr.filename, 0, 0)
-    if activeLayer then
-      ctx:fillText("Layer: " .. activeLayer.name, 0, h)
-
-      local inRc = shrunkenBounds
-      local outSize = Size(128, 128)
-      if inRc.width < outSize.width and
-        inRc.height < outSize.height then
-        outSize = Size(inRc.width, inRc.height)
-      elseif inRc.width > inRc.height then
-        outSize.height = outSize.width * inRc.height / inRc.width
-      else
-        outSize.width = outSize.height * inRc.width / inRc.height
-      end
-
-      local ts = activeLayer.tileset
-      local cel = activeLayer:cel(app.activeFrame)
-      if cel and cel.image then
-        local tile = cel.image:getPixel(0, 0)
-        local tileImg = ts:getTile(tile)
-        ctx:drawImage(tileImg, inRc.x, inRc.y, inRc.width, inRc.height,
-                      0, 2*h, outSize.width, outSize.height)
-      end
-
-      local ntiles = #ts
-      for i = 0,ntiles-1 do
-        local tileImg = ts:getTile(i)
-        ctx:drawImage(tileImg,
-                      inRc.x, inRc.y, inRc.width, inRc.height,
-                      8+(i+1)*outSize.width, 2*h, outSize.width, outSize.height)
-      end
-    end
-  end
-end
-
-local function Canvas_onmousemove(ev)
-  -- TODO
-end
-
-local function Canvas_onmousedown(ev)
-  -- TODO
-end
-
-local function Canvas_onmouseup(ev)
-  -- TODO
-end
-
 local function AttachmentWindow_SwitchWindow()
   if dlg then
     unobserve_sprite()
@@ -134,12 +124,15 @@ local function AttachmentWindow_SwitchWindow()
   else
     dlg = Dialog(title)
       :canvas{ width=400, height=300,
-               onpaint=Canvas_onpaint,
-               onmousemove=Canvas_onmousemove,
-               onmousedown=Canvas_onmousedown,
-               onmouseup=Canvas_onmouseup }
+               onpaint=imi.onpaint,
+               onmousemove=imi.onmousemove,
+               onmousedown=imi.onmousedown,
+               onmouseup=imi.onmouseup }
+    imi.init{ dialog=dlg,
+              ongui=imi_ongui }
     dlg:show{ wait=false }
 
+    App_sitechange()
     app.events:on('sitechange', App_sitechange)
     observe_sprite(app.activeSprite)
   end

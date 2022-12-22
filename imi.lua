@@ -27,12 +27,11 @@ local function initVars(ctx)
   imi.ctx = ctx
   imi.lineHeight = ctx:measureText(" ").height
   imi.cursor = Point(0, 0)
-  imi.cursorStack = {}
-  imi.drawListStack = {}
   imi.rowHeight = 0
   imi.newLine = true
-  imi.idStack = {}
   imi.viewport = Rectangle(0, 0, ctx.width, ctx.height)
+  imi.idStack = {}
+  imi.layoutStack = {}
 end
 
 imi.init = function(values)
@@ -255,21 +254,27 @@ imi.beginViewport = function(size)
                                bounds.width-4, bounds.height-4)
     end)
 
-  table.insert(imi.cursorStack, Point(imi.cursor))
-  table.insert(imi.drawListStack, imi.drawList)
+  table.insert(
+    imi.layoutStack,
+    { cursor=Point(imi.cursor),
+      drawList=imi.drawList,
+      rowHeight=imi.rowHeight })
+
   imi.cursor = imi.viewport.origin
-  imi.rowHeight = 0
   imi.drawList = {}
+  imi.rowHeight = 0
 end
 
 imi.endViewport = function()
   local bounds = imi.viewportWidget.bounds
   local subDrawList = imi.drawList
   imi.viewport = Rectangle(0, 0, imi.ctx.width, imi.ctx.height)
-  imi.cursor = imi.cursorStack[#imi.cursorStack]
-  imi.drawList = imi.drawListStack[#imi.drawListStack]
-  table.remove(imi.cursorStack)
-  table.remove(imi.drawListStack)
+
+  local pop = imi.layoutStack[#imi.layoutStack]
+  imi.cursor = pop.cursor
+  imi.drawList = pop.drawList
+  imi.rowHeight = pop.rowHeight
+  table.remove(imi.layoutStack)
 
   table.insert(
     imi.drawList,

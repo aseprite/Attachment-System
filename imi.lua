@@ -14,13 +14,21 @@ local imi = {
   lineHeight = 0,
 }
 
+----------------------------------------------------------------------
+-- Internal Implementation Details
+----------------------------------------------------------------------
+
 local WidgetFlags = {
-  SELECTED = 1,
+  PRESSED = 1,
   DISABLED = 2,
   FOCUSED = 4,
-  HOVER = 8,
-  PRESSED = 16,
+  CHECKED = 8,
+  HOVER = 16,
 }
+
+local function clamp(value, min, max)
+  return math.max(min, math.min(value, max))
+end
 
 -- Reset these variables before calling ongui()
 local function initVars(ctx)
@@ -28,48 +36,97 @@ local function initVars(ctx)
   imi.lineHeight = ctx:measureText(" ").height
   imi.cursor = Point(0, 0)
   imi.rowHeight = 0
-  imi.newLine = true
+  imi.sameLine = false
+  imi.breakLines = true
   imi.viewport = Rectangle(0, 0, ctx.width, ctx.height)
   imi.idStack = {}
   imi.layoutStack = {}
+  imi.lastID = nil -- Last inserted widget ID
 end
 
-imi.init = function(values)
-  imi.dlg = values.dialog
-  imi.ongui = values.ongui
-end
-
-imi.hasFlags = function(widget, flags)
+local function hasFlags(widget, flags)
   return widget.flags and ((widget.flags & flags) == flags)
 end
 
-imi.setFlags = function(widget, flags)
-  if widget.flags == nil then widget.flags = 0 end
-  widget.flags = widget.flags | flags
+local function setFlags(widget, flags)
+  if widget.flags == nil then
+    widget.flags = flags
+  else
+    widget.flags = widget.flags | flags
+  end
 end
 
-imi.resetFlags = function(widget, flags)
-  if widget.flags == nil then widget.flags = 0 end
-  widget.flags = widget.flags & ~flags
+local function resetFlags(widget, flags)
+  if widget.flags == nil then
+    widget.flags = 0
+  else
+    widget.flags = widget.flags & ~flags
+  end
 end
 
-imi.advanceCursor = function(size, func)
-  if imi.cursor.x > 0 and
-     (imi.newLine or
+local function xorFlags(widget, flags)
+  if widget.flags == nil then
+    widget.flags = flags
+  else
+    widget.flags = widget.flags ~ flags
+  end
+end
+
+-- Last inserted widget getters/setters accessible through imi.widget
+local flagNames = {
+  pressed=WidgetFlags.PRESSED,
+  disabled=WidgetFlags.DISABLED,
+  focused=WidgetFlags.FOCUSED,
+  checked=WidgetFlags.CHECKED,
+  hover=WidgetFlags.HOVER,
+}
+local widgetMt = {
+  __index=function(t, field, value)
+    local widget = imi.widgets[imi.lastID]
+    local flag = flagNames[field]
+    return hasFlags(widget, flag)
+  end,
+  __newindex=function(t, field, value)
+    local widget = imi.widgets[imi.lastID]
+    local flag = flagNames[field]
+    if value then
+      setFlags(widget, flag)
+    else
+      resetFlags(widget, flag)
+    end
+  end
+}
+
+local function advanceCursor(size, func)
+  if not imi.sameLine or
+     (imi.breakLines and
+      imi.cursor.x > 0 and
       imi.cursor.x + size.width > imi.viewport.x+imi.viewport.width) then
     imi.cursor.y = imi.cursor.y + imi.rowHeight
     imi.cursor.x = imi.viewport.x
     imi.rowHeight = 0
   end
 
-  func(Rectangle(imi.cursor, size))
+  local bounds = Rectangle(imi.cursor, size)
+  func(bounds)
+
+  if imi.scrollableBounds then
+    imi.scrollableBounds = imi.scrollableBounds:union(bounds)
+  end
+
   if imi.rowHeight < size.height then
     imi.rowHeight = size.height
   end
   imi.cursor.x = imi.cursor.x + size.width
 end
 
-imi.forEachWidgetInPoint = function(point, func)
+local function addDrawListFunction(callback)
+  table.insert(imi.drawList,
+    { type="callback",
+      callback=callback })
+end
+
+local function forEachWidgetInPoint(point, func)
   for id,widget in pairs(imi.widgets) do
     if widget.bounds:contains(point) then
       func(widget)
@@ -77,7 +134,7 @@ imi.forEachWidgetInPoint = function(point, func)
   end
 end
 
-imi.updateWidget = function(id, values)
+local function updateWidget(id, values)
   if imi.widgets[id] then
     for k,v in pairs(values) do
       imi.widgets[id][k] = v
@@ -85,6 +142,46 @@ imi.updateWidget = function(id, values)
   else
     imi.widgets[id] = values
   end
+end
+
+local dragStartMousePos = Point(0, 0)
+local dragStartScrollPos = Point(0, 0)
+local dragStartScrollBarPos = 0
+
+local function getScrollInfo(widget)
+  local fullLen = widget.viewportSize.width
+  local len = fullLen
+  local pos = widget.scrollPos.x
+  if widget.scrollableSize.width <= widget.viewportSize.width then
+    pos = 0
+  elseif widget.scrollableSize.width > 0 then
+    len = fullLen * widget.viewportSize.width / widget.scrollableSize.width
+    len = clamp(len, app.theme.dimension.scrollbar_size, fullLen)
+    pos = (fullLen-len) * pos / (widget.scrollableSize.width-widget.viewportSize.width)
+    pos = clamp(pos, 0, fullLen-len)
+  else
+    len = 0
+    pos = 0
+  end
+  return { fullLen=fullLen, len=len, pos=pos }
+end
+
+local function insideViewport(bounds)
+  return
+    not imi.viewportWidget or
+    imi.viewportWidget.bounds:intersects(bounds)
+end
+
+----------------------------------------------------------------------
+-- Public API
+----------------------------------------------------------------------
+
+imi.widget = {}
+setmetatable(imi.widget, widgetMt)
+
+imi.init = function(values)
+  imi.dlg = values.dialog
+  imi.ongui = values.ongui
 end
 
 imi.onpaint = function(ev)
@@ -117,13 +214,16 @@ imi.onmousemove = function(ev)
   local repaint = false
   for id,widget in pairs(imi.widgets) do
     if widget.bounds then
+      if widget.onmousemove then
+        widget.onmousemove()
+      end
       if widget.bounds:contains(imi.mousePos) then
-        if not imi.hasFlags(widget, WidgetFlags.HOVER) then
-          imi.setFlags(widget, WidgetFlags.HOVER)
+        if not hasFlags(widget, WidgetFlags.HOVER) then
+          setFlags(widget, WidgetFlags.HOVER)
           repaint = true
         end
-      elseif imi.hasFlags(widget, WidgetFlags.HOVER) then
-        imi.resetFlags(widget, WidgetFlags.HOVER)
+      elseif hasFlags(widget, WidgetFlags.HOVER) then
+        resetFlags(widget, WidgetFlags.HOVER)
         repaint = true
       end
     end
@@ -136,14 +236,19 @@ end
 imi.onmousedown = function(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = ev.button
-  imi.forEachWidgetInPoint(
+  forEachWidgetInPoint(
     imi.mousePos,
     function(widget)
-      if imi.hasFlags(widget, WidgetFlags.HOVER) then
-        imi.setFlags(widget, WidgetFlags.SELECTED)
-        imi.dlg:repaint()
+      if widget.onmousedown then
+        widget.onmousedown()
       end
-      imi.capturedWidget = widget
+      if ev.button == MouseButton.LEFT then
+        if hasFlags(widget, WidgetFlags.HOVER) then
+          imi.capturedWidget = widget
+          setFlags(widget, WidgetFlags.PRESSED)
+          imi.dlg:repaint()
+        end
+      end
     end)
 end
 
@@ -152,14 +257,12 @@ imi.onmouseup = function(ev)
   imi.mouseButton = 0
   if imi.capturedWidget then
     local widget = imi.capturedWidget
-    if imi.hasFlags(widget, WidgetFlags.SELECTED) then
-      imi.resetFlags(widget, WidgetFlags.SELECTED)
-
-      if not imi.hasFlags(widget, WidgetFlags.PRESSED) then
-        imi.setFlags(widget, WidgetFlags.PRESSED)
-      else
-        imi.resetFlags(widget, WidgetFlags.PRESSED)
-      end
+    if widget.onmouseup then
+      widget.onmouseup()
+    end
+    if hasFlags(widget, WidgetFlags.PRESSED) then
+      resetFlags(widget, WidgetFlags.PRESSED)
+      xorFlags(widget, WidgetFlags.CHECKED)
       imi.dlg:repaint()
     end
     imi.capturedWidget = nil
@@ -179,21 +282,20 @@ imi.getID = function()
   if #imi.idStack > 0 then
     id = id + 100000*imi.idStack[#imi.idStack]
   end
+  imi.lastID = id
   return id
 end
 
 imi.label = function(text)
   local id = imi.getID()
   local textSize = imi.ctx:measureText(text)
-  imi.advanceCursor(
+  advanceCursor(
     textSize,
     function(bounds)
-      table.insert(
-        imi.drawList,
-        { type="callback",
-          callback=function(ctx)
-            ctx:fillText(text, bounds.x, bounds.y)
-          end })
+      addDrawListFunction(
+        function(ctx)
+          ctx:fillText(text, bounds.x, bounds.y)
+        end)
     end)
 end
 
@@ -201,57 +303,133 @@ imi.toggle = function(text)
   local id = imi.getID()
   local textSize = imi.ctx:measureText(text)
   local size = Size(textSize.width+32, textSize.height+8)
-  imi.advanceCursor(
+  advanceCursor(
     size,
     function(bounds)
-      imi.updateWidget(id, { bounds=bounds })
-      table.insert(
-        imi.drawList,
-        { type="callback",
-          callback=function(ctx)
-            local widget = imi.widgets[id]
-            local partId
-            if imi.hasFlags(widget, WidgetFlags.SELECTED) or
-               imi.hasFlags(widget, WidgetFlags.PRESSED) then
-              partId = 'button_selected'
-            elseif imi.hasFlags(widget, WidgetFlags.HOVER) then
-              partId = 'button_hot'
-            else
-              partId = 'button_normal'
-            end
-            ctx:drawThemeRect(partId, bounds)
-            ctx:fillText(text,
-                         bounds.x+(bounds.width-textSize.width)/2,
-                         bounds.y+(bounds.height-textSize.height)/2)
-          end })
+      updateWidget(id, { bounds=bounds })
+      addDrawListFunction(
+        function(ctx)
+          local widget = imi.widgets[id]
+          local partId
+          if hasFlags(widget, WidgetFlags.PRESSED) or
+             hasFlags(widget, WidgetFlags.CHECKED) then
+            partId = 'button_selected'
+          elseif hasFlags(widget, WidgetFlags.HOVER) then
+            partId = 'button_hot'
+          else
+            partId = 'button_normal'
+          end
+          ctx:drawThemeRect(partId, bounds)
+          ctx:fillText(text,
+                       bounds.x+(bounds.width-textSize.width)/2,
+                       bounds.y+(bounds.height-textSize.height)/2)
+        end)
   end)
-  return imi.hasFlags(imi.widgets[id], WidgetFlags.PRESSED)
+  return hasFlags(imi.widgets[id], WidgetFlags.CHECKED)
 end
 
 imi.image = function(image, srcRect, dstSize)
   local id = imi.getID()
-  imi.advanceCursor(
+  advanceCursor(
     dstSize,
     function(bounds)
-      imi.updateWidget(id, { bounds=bounds })
-      table.insert(
-        imi.drawList,
-        { type="callback",
-          callback=function()
+      updateWidget(id, { bounds=bounds })
+
+      -- Draw this widget only if it's visible through the current
+      -- viewport (if we are in a viewport)
+      if insideViewport(bounds) then
+        addDrawListFunction(
+          function()
+            local widget = imi.widgets[id]
             imi.ctx:drawImage(image, srcRect, bounds)
-          end })
+            if hasFlags(widget, WidgetFlags.CHECKED) then
+              imi.ctx:drawThemeRect('colorbar_selection_hot',
+                                    widget.bounds)
+            elseif hasFlags(widget, WidgetFlags.HOVER) then
+              imi.ctx:drawThemeRect('colorbar_selection',
+                                    widget.bounds)
+            end
+          end)
+      end
     end)
 end
 
 imi.beginViewport = function(size)
   local id = imi.getID()
-  imi.advanceCursor(
+
+  local barSize = app.theme.dimension.mini_scrollbar_size
+  size.height = size.height + 8 + barSize
+
+  local function onmousemove()
+    local widget = imi.widgets[id]
+    local bounds = widget.bounds
+
+    if widget.draggingHBar then
+      local maxScrollPos = widget.scrollableSize - widget.viewportSize
+
+      if widget.hoverHBar then
+        local info = getScrollInfo(widget)
+        local pos = dragStartScrollBarPos + (imi.mousePos - dragStartMousePos)
+        pos.y = 0
+        pos.x = clamp(pos.x, 0, info.fullLen - info.len)
+        widget.scrollPos.x = maxScrollPos.width * pos.x / (info.fullLen - info.len)
+      else
+        widget.scrollPos = dragStartScrollPos + (dragStartMousePos - imi.mousePos)
+      end
+      widget.scrollPos.y = 0
+      widget.scrollPos.x = clamp(widget.scrollPos.x, 0, maxScrollPos.width)
+      imi.dlg:repaint()
+    else
+      local oldHoverHBar = widget.hoverHBar
+      widget.hoverHBar =
+        (imi.mousePos.y >= bounds.y+bounds.height-barSize-4 and
+         imi.mousePos.y <= bounds.y+bounds.height)
+      if oldHoverHBar ~= widget.hoverHBar then
+        imi.dlg:repaint()
+      end
+    end
+  end
+
+  local function onmousedown()
+    local widget = imi.widgets[id]
+    if widget.hoverHBar or
+       imi.mouseButton == MouseButton.MIDDLE then
+      widget.draggingHBar = true
+      imi.capturedWidget = widget
+      dragStartMousePos = Point(imi.mousePos)
+      dragStartScrollPos = Point(widget.scrollPos)
+      dragStartScrollBarPos = getScrollInfo(widget).pos
+    end
+  end
+
+  local function onmouseup()
+    local widget = imi.widgets[id]
+    if widget.draggingHBar then
+      widget.draggingHBar = false
+    end
+  end
+
+  advanceCursor(
     size,
     function(bounds)
-      imi.updateWidget(id, { bounds=bounds })
-      imi.viewportWidget = imi.widgets[id]
-      imi.viewport = Rectangle(bounds.x+2, bounds.y+2,
-                               bounds.width-4, bounds.height-4)
+      updateWidget(
+        id,
+        { bounds=bounds,
+          onmousemove=onmousemove,
+          onmousedown=onmousedown,
+          onmouseup=onmouseup })
+
+      local widget = imi.widgets[id]
+      if widget.draggingHBar == nil then
+        widget.draggingHBar = false
+      end
+      if widget.scrollPos == nil then
+        widget.scrollPos = Point(0, 0)
+      end
+
+      imi.viewportWidget = widget
+      imi.viewport = Rectangle(bounds.x+4, bounds.y+4,
+                               bounds.width-8, bounds.height-8-barSize)
     end)
 
   table.insert(
@@ -260,28 +438,53 @@ imi.beginViewport = function(size)
       drawList=imi.drawList,
       rowHeight=imi.rowHeight })
 
-  imi.cursor = imi.viewport.origin
+  imi.cursor = imi.viewport.origin - imi.widgets[id].scrollPos
   imi.drawList = {}
   imi.rowHeight = 0
+  imi.scrollableBounds = Rectangle(imi.cursor, Size(1, 1))
 end
 
 imi.endViewport = function()
-  local bounds = imi.viewportWidget.bounds
+  local widget = imi.viewportWidget
+  local bounds = widget.bounds
+  local hover = widget.hoverHBar
   local subDrawList = imi.drawList
   imi.viewport = Rectangle(0, 0, imi.ctx.width, imi.ctx.height)
 
   local pop = imi.layoutStack[#imi.layoutStack]
+
+  local barSize = app.theme.dimension.mini_scrollbar_size
+  widget.scrollableSize = imi.scrollableBounds.size
+  widget.viewportSize = Size(bounds.width-4,
+                             bounds.height-barSize-5)
+
   imi.cursor = pop.cursor
   imi.drawList = pop.drawList
   imi.rowHeight = pop.rowHeight
   table.remove(imi.layoutStack)
 
-  table.insert(
-    imi.drawList,
-    { type="callback",
-      callback=function()
-        imi.ctx:drawThemeRect('sunken_normal', bounds)
-  end })
+  addDrawListFunction(
+    function()
+      imi.ctx:drawThemeRect('sunken_normal', bounds)
+
+      local bgPart, thumbPart
+      if hover then
+        bgPart = 'mini_scrollbar_bg_hot'
+        thumbPart = 'mini_scrollbar_thumb_hot'
+      else
+        bgPart = 'mini_scrollbar_bg'
+        thumbPart = 'mini_scrollbar_thumb'
+      end
+
+      local info = getScrollInfo(widget)
+
+      imi.ctx:drawThemeRect(bgPart,
+                            bounds.x+4, bounds.y+bounds.height-barSize-4,
+                            bounds.width-8, barSize)
+      imi.ctx:drawThemeRect(thumbPart,
+                            bounds.x+4+info.pos, bounds.y+bounds.height-barSize-5,
+                            info.len, barSize)
+    end)
 
   table.insert(imi.drawList, { type="save" })
   table.insert(imi.drawList, { type="clip",
@@ -294,6 +497,7 @@ imi.endViewport = function()
   end
   table.insert(imi.drawList, { type="restore" })
   imi.viewportWidget = nil
+  imi.scrollableBounds = nil
 end
 
 return imi

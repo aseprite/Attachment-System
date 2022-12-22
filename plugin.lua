@@ -53,7 +53,6 @@ local function imi_ongui()
     imi.label("Sprite: " .. spr.filename)
     if activeLayer then
       imi.label("Layer: " .. activeLayer.name)
-      imi.newLine = true
 
       local inRc = shrunkenBounds
       local outSize = Size(128, 128)
@@ -66,23 +65,34 @@ local function imi_ongui()
         outSize.width = outSize.height * inRc.width / inRc.height
       end
 
+      imi.sameLine = false
+
       local ts = activeLayer.tileset
       local cel = activeLayer:cel(app.activeFrame)
       if cel and cel.image then
         local tile = cel.image:getPixel(0, 0)
         local tileImg = ts:getTile(tile)
         imi.image(tileImg, inRc, outSize)
-        imi.newLine = false
-      end
+       end
 
       local ntiles = #ts
 
+      imi.sameLine = true
       imi.beginViewport(Size(imi.ctx.width - imi.cursor.x,
                              outSize.height))
+      imi.breakLines = false
       for i=1,ntiles do
         imi.pushID(i)
         local tileImg = ts:getTile(i)
         imi.image(tileImg, inRc, outSize)
+        if imi.widget.checked then
+          imi.widget.checked = false
+          -- Change tilemap tile -- TODO undo info
+          if cel and cel.image then
+            cel.image:putPixel(0, 0, i)
+            app.refresh()
+          end
+        end
         imi.popID()
       end
       imi.endViewport()

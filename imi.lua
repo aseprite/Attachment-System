@@ -303,8 +303,7 @@ imi.label = function(text)
     end)
 end
 
-imi.toggle = function(text)
-  local id = imi.getID()
+imi._toggle = function(id, text)
   local textSize = imi.ctx:measureText(text)
   local size = Size(textSize.width+32, textSize.height+8)
   advanceCursor(
@@ -332,6 +331,20 @@ imi.toggle = function(text)
   return hasFlags(imi.widgets[id], WidgetFlags.CHECKED)
 end
 
+imi.toggle = function(text)
+  local id = imi.getID()
+  return imi._toggle(id, text)
+end
+
+imi.button = function(text)
+  local id = imi.getID()
+  local result = imi._toggle(id, text)
+  if result then
+    imi.widget.checked = false
+  end
+  return result
+end
+
 imi.image = function(image, srcRect, dstSize)
   local id = imi.getID()
   advanceCursor(
@@ -346,7 +359,8 @@ imi.image = function(image, srcRect, dstSize)
           function()
             local widget = imi.widgets[id]
             imi.ctx:drawImage(image, srcRect, bounds)
-            if hasFlags(widget, WidgetFlags.CHECKED) then
+            if hasFlags(widget, WidgetFlags.PRESSED) or
+               hasFlags(widget, WidgetFlags.CHECKED) then
               imi.ctx:drawThemeRect('colorbar_selection_hot',
                                     widget.bounds)
             elseif hasFlags(widget, WidgetFlags.HOVER) then
@@ -356,6 +370,7 @@ imi.image = function(image, srcRect, dstSize)
           end)
       end
     end)
+  return hasFlags(imi.widgets[id], WidgetFlags.CHECKED)
 end
 
 imi.beginViewport = function(size)

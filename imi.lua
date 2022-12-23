@@ -42,6 +42,12 @@ local function initVars(ctx)
   imi.idStack = {}
   imi.layoutStack = {}
   imi.lastID = nil -- Last inserted widget ID
+
+  -- List of widget IDs inside mousePos, useful to send mouse events
+  -- in order, the order in this table is from from the backmost
+  -- widget to the frontmost one, but it's iterated reversely to go
+  -- from front to back.
+  imi.mouseWidgets = {}
 end
 
 local function hasFlags(widget, flags)
@@ -126,14 +132,6 @@ local function addDrawListFunction(callback)
       callback=callback })
 end
 
-local function forEachWidgetInPoint(point, func)
-  for id,widget in pairs(imi.widgets) do
-    if widget.bounds:contains(point) then
-      func(widget)
-    end
-  end
-end
-
 local function updateWidget(id, values)
   if imi.widgets[id] then
     for k,v in pairs(values) do
@@ -141,6 +139,12 @@ local function updateWidget(id, values)
     end
   else
     imi.widgets[id] = values
+  end
+
+  -- Add this widget to the list of mouseWidgets if it's in mousePos
+  if imi.widgets[id].bounds and
+     imi.widgets[id].bounds:contains(imi.mousePos) then
+    table.insert(imi.mouseWidgets, id)
   end
 end
 
@@ -236,20 +240,20 @@ end
 imi.onmousedown = function(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = ev.button
-  forEachWidgetInPoint(
-    imi.mousePos,
-    function(widget)
-      if widget.onmousedown then
-        widget.onmousedown()
+
+  for _,id in ipairs(imi.mouseWidgets) do
+    local widget = imi.widgets[id]
+    if widget.onmousedown then
+      widget.onmousedown()
+    end
+    if ev.button == MouseButton.LEFT then
+      if hasFlags(widget, WidgetFlags.HOVER) then
+        imi.capturedWidget = widget
+        setFlags(widget, WidgetFlags.PRESSED)
+        imi.dlg:repaint()
       end
-      if ev.button == MouseButton.LEFT then
-        if hasFlags(widget, WidgetFlags.HOVER) then
-          imi.capturedWidget = widget
-          setFlags(widget, WidgetFlags.PRESSED)
-          imi.dlg:repaint()
-        end
-      end
-    end)
+    end
+  end
 end
 
 imi.onmouseup = function(ev)

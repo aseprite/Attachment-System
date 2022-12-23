@@ -153,7 +153,7 @@ local dragStartScrollPos = Point(0, 0)
 local dragStartScrollBarPos = 0
 
 local function getScrollInfo(widget)
-  local fullLen = widget.viewportSize.width
+  local fullLen = widget.viewportSize.width-4
   local len = fullLen
   local pos = widget.scrollPos.x
   if widget.scrollableSize.width <= widget.viewportSize.width then

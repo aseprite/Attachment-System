@@ -72,6 +72,7 @@ local function imi_ongui()
       end
 
       imi.sameLine = false
+      local hoverItems = false
 
       -- List of tiles/attachments of the active layer
       local selectedTilesToAdd = {}
@@ -96,6 +97,10 @@ local function imi_ongui()
         imi.pushID(i)
         local tileImg = ts:getTile(i)
         imi.image(tileImg, inRc, outSize)
+
+        if imi.widget.hover then
+          hoverItems = true
+        end
 
         if removeAllChecks then
           imi.widget.checked = false
@@ -204,6 +209,12 @@ local function imi_ongui()
             end
           end
         end
+      else
+        newCategory = false
+      end
+
+      if hoverItems and not newCategory then
+        imi.mouseCursor = MouseCursor.POINTER
       end
     end
   end
@@ -243,13 +254,15 @@ local function AttachmentWindow_SwitchWindow()
     dlg = nil
   else
     dlg = Dialog(title)
-      :canvas{ width=400, height=300,
+      :canvas{ id="canvas",
+               width=400, height=300,
                onpaint=imi.onpaint,
                onmousemove=imi.onmousemove,
                onmousedown=imi.onmousedown,
                onmouseup=imi.onmouseup }
     imi.init{ dialog=dlg,
-              ongui=imi_ongui }
+              ongui=imi_ongui,
+              canvas="canvas" }
     dlg:show{ wait=false }
 
     App_sitechange()

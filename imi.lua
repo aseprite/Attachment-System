@@ -34,6 +34,7 @@ end
 local function initVars(ctx)
   imi.ctx = ctx
   imi.lineHeight = ctx:measureText(" ").height
+  imi.mouseCursor = MouseCursor.ARROW
   imi.cursor = Point(0, 0)
   imi.rowHeight = 0
   imi.sameLine = false
@@ -186,6 +187,7 @@ setmetatable(imi.widget, widgetMt)
 imi.init = function(values)
   imi.dlg = values.dialog
   imi.ongui = values.ongui
+  imi.canvasId = values.canvas
 end
 
 imi.onpaint = function(ev)
@@ -194,6 +196,10 @@ imi.onpaint = function(ev)
 
   if imi.ongui then
     imi.ongui()
+  end
+
+  if imi.canvasId then
+    imi.dlg:modify{ id=imi.canvasId, mouseCursor=imi.mouseCursor }
   end
 
   for i,cmd in ipairs(imi.drawList) do
@@ -235,6 +241,8 @@ imi.onmousemove = function(ev)
   if repaint then
     imi.dlg:repaint()
   end
+
+  imi.dlg:modify{ id="canvas", mouseCursor=imi.mouseCursor }
 end
 
 imi.onmousedown = function(ev)
@@ -271,6 +279,8 @@ imi.onmouseup = function(ev)
     end
     imi.capturedWidget = nil
   end
+
+  imi.dlg:modify{ id="canvas", mouseCursor=imi.mouseCursor }
 end
 
 imi.pushID = function(id)
@@ -398,6 +408,8 @@ imi.beginViewport = function(size)
       widget.scrollPos.y = 0
       widget.scrollPos.x = clamp(widget.scrollPos.x, 0, maxScrollPos.width)
       imi.dlg:repaint()
+
+      imi.mouseCursor = MouseCursor.GRABBING
     else
       local oldHoverHBar = widget.hoverHBar
       widget.hoverHBar =
@@ -426,6 +438,7 @@ imi.beginViewport = function(size)
     if widget.draggingHBar then
       widget.draggingHBar = false
     end
+    imi.dlg:repaint()
   end
 
   advanceCursor(

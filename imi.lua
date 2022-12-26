@@ -88,7 +88,7 @@ local flagNames = {
   hover=WidgetFlags.HOVER,
 }
 local widgetMt = {
-  __index=function(t, field, value)
+  __index=function(t, field)
     local widget = imi.widgets[imi.lastID]
     local flag = flagNames[field]
     return hasFlags(widget, flag)
@@ -96,15 +96,23 @@ local widgetMt = {
   __newindex=function(t, field, value)
     local widget = imi.widgets[imi.lastID]
     local flag = flagNames[field]
-    if value then
-      setFlags(widget, flag)
-    else
-      resetFlags(widget, flag)
+    if flag then
+      if value then
+        setFlags(widget, flag)
+      else
+        resetFlags(widget, flag)
+      end
+    elseif field == "color" then
+      widget.color = value
     end
   end
 }
 
 local function advanceCursor(size, func)
+  if imi.alignRight then
+    imi.cursor.x = imi.cursor.x - size.width
+  end
+
   if not imi.sameLine or
      (imi.breakLines and
       imi.cursor.x > 0 and
@@ -315,14 +323,27 @@ imi.getID = function()
   return id
 end
 
+imi.space = function(width)
+  advanceCursor(
+    Size(width, 1),
+    function(bounds)
+      -- Do nothing
+    end)
+end
+
 imi.label = function(text)
   local id = imi.getID()
   local textSize = imi.ctx:measureText(text)
   advanceCursor(
     textSize,
     function(bounds)
+      updateWidget(id, { bounds=bounds })
+
       addDrawListFunction(
         function(ctx)
+          if imi.widgets[id].color then
+            ctx.color = imi.widgets[id].color
+          end
           ctx:fillText(text, bounds.x, bounds.y)
         end)
     end)

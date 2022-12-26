@@ -43,6 +43,19 @@ local function calculate_shrunken_bounds(tilemapLayer)
   return bounds
 end
 
+local function calculate_tiles_histogram(tilemapLayer)
+  local histogram = {}
+  for _,cel in ipairs(tilemapLayer.cels) do
+    local ti = cel.image:getPixel(0, 0)
+    if histogram[ti] == nil then
+      histogram[ti] = 1
+    else
+      histogram[ti] = histogram[ti] + 1
+    end
+  end
+  return histogram
+end
+
 -- Used to remove all checked images after adding the tiles to a new category
 local removeAllChecks = false
 -- Show categories + controls to add/remove categories
@@ -50,6 +63,8 @@ local showCategories = false
 local newCategory = false
 local categories = { }
 local categoryItems = { }
+-- How many times each tile is used in the active layer
+local tilesHistogram = {}
 
 local function imi_ongui()
   local repaint = false
@@ -117,6 +132,9 @@ local function imi_ongui()
               tilemapCopy:putPixel(0, 0, i)
               cel.image:drawImage(tilemapCopy)
 
+              -- Recalculate histogram
+              tilesHistogram = calculate_tiles_histogram(activeLayer)
+
               repaint = true
               app.refresh()
             end
@@ -124,6 +142,16 @@ local function imi_ongui()
             table.insert(selectedTilesToAdd, i)
           end
         end
+
+        imi.alignRight = true
+        if tilesHistogram[i] == nil then
+          imi.label("Unused")
+        else
+          imi.label(tostring(tilesHistogram[i]))
+        end
+        imi.widget.color = Color(255, 255, 0)
+        imi.alignRight = false
+
         imi.popID()
       end
       imi.endViewport()
@@ -238,6 +266,7 @@ local function App_sitechange(ev)
     activeLayer = lay
     if activeLayer and activeLayer.isTilemap then
       shrunkenBounds = calculate_shrunken_bounds(activeLayer)
+      tilesHistogram = calculate_tiles_histogram(activeLayer)
     else
       shrunkenBounds = Rectangle()
     end

@@ -9,27 +9,11 @@ local dlg
 local title = "Attachment Window"
 local observedSprite
 local activeLayer
-local shrunkenBounds = {}
+local shrunkenBounds = {} -- Minimal bounds between all tiles of the active layer
+local tilesHistogram = {} -- How many times each tile is used in the active layer
+local activeTileImageInfo = {} -- Used to re-calculate info when the tile image changes
+
 local imi = dofile('./imi.lua')
-
-local function Sprite_change()
-  -- TODO
-end
-
-local function unobserve_sprite()
-  if observedSprite then
-    observedSprite.events:off(Sprite_change)
-    observedSprite = nil
-  end
-end
-
-local function observe_sprite(spr)
-  unobserve_sprite()
-  observedSprite = spr
-  if observedSprite then
-    observedSprite.events:on('change', Sprite_change)
-  end
-end
 
 local function calculate_shrunken_bounds(tilemapLayer)
   assert(tilemapLayer.isTilemap)
@@ -56,6 +40,17 @@ local function calculate_tiles_histogram(tilemapLayer)
   return histogram
 end
 
+local function get_active_tile_image()
+  if activeLayer and activeLayer.isTilemap then
+    local cel = activeLayer:cel(app.activeFrame)
+    if cel and cel.image then
+      local ti = cel.image:getPixel(0, 0)
+      return activeLayer.tileset:getTile(ti)
+    end
+  end
+  return nil
+end
+
 -- Used to remove all checked images after adding the tiles to a new category
 local removeAllChecks = false
 -- Show categories + controls to add/remove categories
@@ -63,8 +58,6 @@ local showCategories = false
 local newCategory = false
 local categories = { }
 local categoryItems = { }
--- How many times each tile is used in the active layer
-local tilesHistogram = {}
 
 local function imi_ongui()
   local repaint = false
@@ -130,14 +123,18 @@ local function imi_ongui()
             if cel and cel.image then
               local tilemapCopy = Image(cel.image)
               tilemapCopy:putPixel(0, 0, i)
+
+              -- This will trigger a Sprite_change() where we
+              -- re-calculate shrunkenBounds, tilesHistogram, etc.
               cel.image:drawImage(tilemapCopy)
-
-              -- Recalculate histogram
-              tilesHistogram = calculate_tiles_histogram(activeLayer)
-
-              repaint = true
-              app.refresh()
+            else
+              local image = Image(1, 1, ColorMode.TILEMAP)
+              image:putPixel(0, 0, i)
+              cel = app.activeSprite:newCel(activeLayer, app.activeFrame, image)
             end
+
+            repaint = true
+            app.refresh()
           elseif cel and cel.image then
             table.insert(selectedTilesToAdd, i)
           end
@@ -249,13 +246,48 @@ local function imi_ongui()
   if repaint then dlg:repaint() end
 end
 
+local function Sprite_change()
+  if activeLayer and activeLayer.isTilemap then
+    local tileImg = get_active_tile_image()
+    if tileImg and
+       (not activeTileImageInfo or
+        tileImg.id ~= activeTileImageInfo.id or
+        (tileImg.id == activeTileImageInfo.id and
+         tileImg.version > activeTileImageInfo.version)) then
+      activeTileImageInfo = { id=tileImg.id,
+                              version=tileImg.version }
+      shrunkenBounds = calculate_shrunken_bounds(activeLayer)
+      tilesHistogram = calculate_tiles_histogram(activeLayer)
+      if not imi.isongui then
+        imi.dlg:repaint()
+      end
+    else
+      activeTileImageInfo = {}
+    end
+  end
+end
+
+local function unobserve_sprite()
+  if observedSprite then
+    observedSprite.events:off(Sprite_change)
+    observedSprite = nil
+  end
+end
+
+local function observe_sprite(spr)
+  unobserve_sprite()
+  observedSprite = spr
+  if observedSprite then
+    observedSprite.events:on('change', Sprite_change)
+  end
+end
+
 -- When the active site (active sprite, cel, frame, etc.) changes this
 -- function will be called.
 local function App_sitechange(ev)
   local newSpr = app.activeSprite
   if newSpr ~= observedSprite then
     observe_sprite(newSpr)
-    dlg:repaint()
   end
 
   local lay = app.activeLayer
@@ -272,7 +304,17 @@ local function App_sitechange(ev)
     end
   end
 
-  dlg:repaint()
+  local tileImg = get_active_tile_image()
+  if tileImg then
+    activeTileImageInfo = { id=tileImg.id,
+                            version=tileImg.version }
+  else
+    activeTileImageInfo = {}
+  end
+
+  if not imi.isongui then
+    dlg:repaint() -- TODO repaint only when it's needed
+  end
 end
 
 local function AttachmentWindow_SwitchWindow()

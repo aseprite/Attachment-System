@@ -218,7 +218,9 @@ imi.onpaint = function(ev)
   initVars(ctx)
 
   if imi.ongui then
+    imi.isongui = true
     imi.ongui()
+    imi.isongui = false
   end
 
   if imi.canvasId then

@@ -53,14 +53,67 @@ end
 
 -- Used to remove all checked images after adding the tiles to a new category
 local removeAllChecks = false
--- Show categories + controls to add/remove categories
-local showCategories = false
-local newCategory = false
+-- Indicate if we should show all tiles or only the ones from a specific category
+local showCategoryRadio = { value=0 }
 local categories = { }
-local categoryItems = { }
+local editCategory = false
+local editCategoryItems = { }
+
+local function create_tile_view(index, ti, ts, inRc, outSize,
+                                cel, selectedTilesToAdd)
+  imi.pushID(index)
+  local tileImg = ts:getTile(ti)
+  imi.image(tileImg, inRc, outSize)
+
+  if imi.widget.hover then
+    hoverItems = true
+  end
+
+  if removeAllChecks then
+    imi.widget.checked = false
+  end
+
+  if imi.widget.checked then -- When the image is clicked
+    if not editCategory then
+      imi.widget.checked = false
+
+      -- Change tilemap tile if are not showing categories
+      -- We use Image:drawImage() to get undo information
+      if cel and cel.image then
+        local tilemapCopy = Image(cel.image)
+        tilemapCopy:putPixel(0, 0, ti)
+
+        -- This will trigger a Sprite_change() where we
+        -- re-calculate shrunkenBounds, tilesHistogram, etc.
+        cel.image:drawImage(tilemapCopy)
+      else
+        local image = Image(1, 1, ColorMode.TILEMAP)
+        image:putPixel(0, 0, ti)
+
+        print('app.activeFrame=', app.activeFrame, 'ti=', ti)
+        cel = app.activeSprite:newCel(activeLayer, app.activeFrame, image, Point(0, 0))
+      end
+
+      imi.repaint = true
+      app.refresh()
+    elseif cel and cel.image then
+      table.insert(selectedTilesToAdd, ti)
+    end
+  end
+
+  imi.alignRight = true
+  if tilesHistogram[ti] == nil then
+    imi.label("Unused")
+  else
+    imi.label(tostring(tilesHistogram[ti]))
+  end
+  imi.widget.color = Color(255, 255, 0)
+  imi.alignRight = false
+
+  imi.popID()
+end
 
 local function imi_ongui()
-  local repaint = false
   local spr = app.activeSprite
   if not spr then
     dlg:modify{ title=title }
@@ -79,77 +132,48 @@ local function imi_ongui()
         outSize.width = outSize.height * inRc.width / inRc.height
       end
 
+      -- All or Categories
+
+      imi.sameLine = true
+      local allTiles = imi.radio("All", showCategoryRadio, 0)
+      local showCategoryItems = nil
+      for i,category in ipairs(categories) do
+        imi.pushID(i)
+        if imi.radio(category.name, showCategoryRadio, i) then
+          showCategoryItems = { table.unpack(category.items) }
+        end
+        imi.popID()
+      end
+
       imi.sameLine = false
-      local hoverItems = false
 
       -- List of tiles/attachments of the active layer
       local selectedTilesToAdd = {}
+      local hoverItems = false
 
       local ts = activeLayer.tileset
       local cel = activeLayer:cel(app.activeFrame)
-      local tile = nil
       if cel and cel.image then
-        tile = cel.image:getPixel(0, 0)
-        local tileImg = ts:getTile(tile)
+        local ti = cel.image:getPixel(0, 0)
+        local tileImg = ts:getTile(ti)
         imi.image(tileImg, inRc, outSize)
         imi.sameLine = true
        end
-
-      local ntiles = #ts
 
       imi.beginViewport(Size(imi.ctx.width - imi.cursor.x,
                              outSize.height))
       imi.sameLine = true
       imi.breakLines = false
-      for i=1,ntiles do
-        imi.pushID(i)
-        local tileImg = ts:getTile(i)
-        imi.image(tileImg, inRc, outSize)
-
-        if imi.widget.hover then
-          hoverItems = true
+      if allTiles then
+        for i=1,#ts do
+          create_tile_view(i, i, ts, inRc, outSize,
+                           cel, selectedTilesToAdd)
         end
-
-        if removeAllChecks then
-          imi.widget.checked = false
+      else
+        for i,ti in ipairs(showCategoryItems) do
+          create_tile_view(i, ti, ts, inRc, outSize,
+                           cel, selectedTilesToAdd)
         end
-
-        if imi.widget.checked then
-          if not newCategory then
-            imi.widget.checked = false
-
-            -- Change tilemap tile if are not showing categories
-            -- We use Image:drawImage() to get undo information
-            if cel and cel.image then
-              local tilemapCopy = Image(cel.image)
-              tilemapCopy:putPixel(0, 0, i)
-
-              -- This will trigger a Sprite_change() where we
-              -- re-calculate shrunkenBounds, tilesHistogram, etc.
-              cel.image:drawImage(tilemapCopy)
-            else
-              local image = Image(1, 1, ColorMode.TILEMAP)
-              image:putPixel(0, 0, i)
-              cel = app.activeSprite:newCel(activeLayer, app.activeFrame, image)
-            end
-
-            repaint = true
-            app.refresh()
-          elseif cel and cel.image then
-            table.insert(selectedTilesToAdd, i)
-          end
-        end
-
-        imi.alignRight = true
-        if tilesHistogram[i] == nil then
-          imi.label("Unused")
-        else
-          imi.label(tostring(tilesHistogram[i]))
-        end
-        imi.widget.color = Color(255, 255, 0)
-        imi.alignRight = false
-
-        imi.popID()
       end
       imi.endViewport()
 
@@ -159,91 +183,75 @@ local function imi_ongui()
 
       -- Categories
 
-      imi.breakLines = true
       imi.sameLine = false
-      showCategories = imi.toggle("Categories")
-      if showCategories then
+      editCategory = imi.toggle("Edit Category")
+      imi.sameLine = true
+      imi.breakLines = true
+      if editCategory then
+        imi.space(2)
+        local add = imi.button("Add")
+        local remove = imi.button("Remove")
+        local outSize2 = Size(outSize.width*3/4, outSize.height*3/4)
+        imi.sameLine = false
+        imi.beginViewport(Size(imi.ctx.width,
+                               outSize2.height))
         imi.sameLine = true
-
-        -- Show current categories
-        for i,category in ipairs(categories) do
-          imi.pushID(i)
-          if imi.button(category.name) then
-            categoryItems = { table.unpack(category.items) }
-            repaint = true
+        imi.breakLines = false
+        local editSelectedItems = {}
+        for index,ti in ipairs(editCategoryItems) do
+          imi.pushID(index)
+          local tileImg = ts:getTile(ti)
+          if imi.image(tileImg, inRc, outSize2) then
+            table.insert(editSelectedItems, index)
           end
           imi.popID()
         end
+        imi.endViewport()
 
-        newCategory = imi.toggle("New Category")
-        if newCategory then
-          local add = imi.button("Add")
-          local remove = imi.button("Remove")
-          local outSize2 = Size(outSize.width*3/4, outSize.height*3/4)
-          imi.sameLine = false
-          imi.beginViewport(Size(imi.ctx.width,
-                                 outSize2.height))
-          imi.sameLine = true
-          imi.breakLines = false
-          local selected = {}
-          for index,ti in ipairs(categoryItems) do
-            imi.pushID(index)
-            local tileImg = ts:getTile(ti)
-            if imi.image(tileImg, inRc, outSize2) then
-              table.insert(selected, index)
-            end
-            imi.popID()
-          end
-          imi.endViewport()
+        imi.sameLine = false
+        if #editCategoryItems > 0 and
+          imi.button("Save Category") then
+          local d =
+            Dialog("New Category Name")
+            :entry{ id="name", label="Name:", focus=true }
+            :button{ id="ok", text="OK", focus=true }
+            :button{ id="cancel", text="Cancel" }
 
-          imi.sameLine = false
-          if #categoryItems > 0 and
-             imi.button("Save Category") then
-            local d =
-              Dialog("New Category Name")
-                :entry{ id="name", label="Name:", focus=true }
-                :button{ id="ok", text="OK", focus=true }
-                :button{ id="cancel", text="Cancel" }
+          dlg:repaint()
 
-            dlg:repaint()
-
-            d:show()
-            local data = d.data
-            if data.ok then
-              local category = {
-                name=data.name,
-                items={ table.unpack(categoryItems) },
-              }
-              table.insert(categories, category)
-              repaint = true
-            end
-          end
-
-          -- if add and tile ~= nil then
-          if add then
-            removeAllChecks = true
-            for _,ti in ipairs(selectedTilesToAdd) do
-              table.insert(categoryItems, ti)
-            end
-            repaint = true
-          end
-          if remove and tile ~= nil then
-            for i=#selected,1,-1 do
-              table.remove(categoryItems, selected[i])
-              repaint = true
-            end
+          d:show()
+          local data = d.data
+          if data.ok then
+            local category = {
+              name=data.name,
+              items={ table.unpack(editCategoryItems) },
+            }
+            table.insert(categories, category)
+            imi.repaint = true
           end
         end
-      else
-        newCategory = false
-      end
 
-      if hoverItems and not newCategory then
-        imi.mouseCursor = MouseCursor.POINTER
+        if add then
+          removeAllChecks = true
+          for _,ti in ipairs(selectedTilesToAdd) do
+            table.insert(editCategoryItems, ti)
+          end
+          imi.repaint = true
+        end
+        if remove then
+          for i=#editSelectedItems,1,-1 do
+            table.remove(editCategoryItems,
+                         editSelectedItems[i])
+            imi.repaint = true
+          end
+        end
       end
     end
+
+    if hoverItems and not newCategory then
+      imi.mouseCursor = MouseCursor.POINTER
+    end
   end
-  if repaint then dlg:repaint() end
 end
 
 local function Sprite_change()

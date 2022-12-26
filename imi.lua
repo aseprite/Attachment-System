@@ -42,7 +42,9 @@ local function initVars(ctx)
   imi.viewport = Rectangle(0, 0, ctx.width, ctx.height)
   imi.idStack = {}
   imi.layoutStack = {}
+  imi.afterOnGui = {}
   imi.lastID = nil -- Last inserted widget ID
+  imi.repaint = false
 
   -- List of widget IDs inside mousePos, useful to send mouse events
   -- in order, the order in this table is from from the backmost
@@ -141,6 +143,10 @@ local function addDrawListFunction(callback)
       callback=callback })
 end
 
+local function addAfterOnGui(callback)
+  table.insert(imi.afterOnGui, callback)
+end
+
 local function pointInsideWidgetHierarchy(widget, pos)
   while widget.bounds and
         widget.bounds:contains(imi.mousePos) do
@@ -215,16 +221,30 @@ end
 
 imi.onpaint = function(ev)
   local ctx = ev.context
-  initVars(ctx)
 
-  if imi.ongui then
-    imi.isongui = true
-    imi.ongui()
-    imi.isongui = false
-  end
+  imi.repaint = true
+  while imi.repaint do
+    initVars(ctx)
 
-  if imi.canvasId then
-    imi.dlg:modify{ id=imi.canvasId, mouseCursor=imi.mouseCursor }
+    if imi.ongui then
+      imi.isongui = true
+      imi.ongui()
+      imi.isongui = false
+    end
+
+    for _,f in ipairs(imi.afterOnGui) do
+      f()
+    end
+    imi.afterOnGui = {}
+
+    if imi.canvasId then
+      imi.dlg:modify{ id=imi.canvasId, mouseCursor=imi.mouseCursor }
+    end
+
+    if imi.repaint then
+      -- Discard the whole drawList as we're going to repaint
+      imi.drawList = {}
+    end
   end
 
   for i,cmd in ipairs(imi.drawList) do
@@ -391,6 +411,37 @@ imi.button = function(text)
     imi.widget.checked = false
   end
   return result
+end
+
+imi.radio = function(text, t, thisValue)
+  local id = imi.getID()
+
+  addAfterOnGui(
+    function()
+      -- Uncheck radio buttons in previous positions
+      if t.value ~= thisValue then
+        resetFlags(imi.widgets[id], WidgetFlags.CHECKED)
+      end
+    end)
+
+  local result = imi._toggle(id, text)
+
+  if not imi.widget.pressed and t.uncheckFollowing then
+    imi.widget.checked = false
+  elseif imi.widget.pressed or t.value == thisValue then
+    imi.widget.checked = true
+    t.value = thisValue
+    if imi.widget.pressed then
+      -- Uncheck radio buttons in following! positions
+      t.uncheckFollowing = true
+      addAfterOnGui(
+        function()
+          t.uncheckFollowing = nil
+        end)
+    end
+  end
+
+  return t.value == thisValue
 end
 
 imi.image = function(image, srcRect, dstSize)

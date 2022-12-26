@@ -133,7 +133,23 @@ local function addDrawListFunction(callback)
       callback=callback })
 end
 
+local function pointInsideWidgetHierarchy(widget, pos)
+  while widget.bounds and
+        widget.bounds:contains(imi.mousePos) do
+    if widget.parent then
+      widget = widget.parent
+    else
+      return true
+    end
+  end
+  return false
+end
+
 local function updateWidget(id, values)
+  -- Set the current viewport (or nil) as the parent of this widget
+  -- TODO generalize this to any kind of container widget
+  values.parent = imi.viewportWidget
+
   if imi.widgets[id] then
     for k,v in pairs(values) do
       imi.widgets[id][k] = v
@@ -143,8 +159,7 @@ local function updateWidget(id, values)
   end
 
   -- Add this widget to the list of mouseWidgets if it's in mousePos
-  if imi.widgets[id].bounds and
-     imi.widgets[id].bounds:contains(imi.mousePos) then
+  if pointInsideWidgetHierarchy(imi.widgets[id], imi.mousePos) then
     table.insert(imi.mouseWidgets, id)
   end
 end
@@ -227,7 +242,7 @@ imi.onmousemove = function(ev)
       if widget.onmousemove then
         widget.onmousemove()
       end
-      if widget.bounds:contains(imi.mousePos) then
+      if pointInsideWidgetHierarchy(widget, imi.mousePos) then
         if not hasFlags(widget, WidgetFlags.HOVER) then
           setFlags(widget, WidgetFlags.HOVER)
           repaint = true

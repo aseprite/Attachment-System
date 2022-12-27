@@ -277,9 +277,29 @@ local function Sprite_change()
   end
 end
 
+local function Sprite_remaptileset(ev)
+  -- TODO add this check when category information is undone/redone
+  --if not ev.fromUndo then
+
+    for _,category in ipairs(categories) do
+      local newItems = {}
+      io.write("old: ")
+      for k=1,#category.items do
+        newItems[k] = ev.remap[category.items[k]]
+      end
+      -- TODO this change of property values must be integrated in the
+      --      current undo transaction
+      category.items = newItems
+    end
+
+  --end
+  dlg:repaint()
+end
+
 local function unobserve_sprite()
   if observedSprite then
     observedSprite.events:off(Sprite_change)
+    observedSprite.events:off(Sprite_remaptileset)
     observedSprite = nil
   end
 end
@@ -289,6 +309,7 @@ local function observe_sprite(spr)
   observedSprite = spr
   if observedSprite then
     observedSprite.events:on('change', Sprite_change)
+    observedSprite.events:on('remaptileset', Sprite_remaptileset)
   end
 end
 

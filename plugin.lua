@@ -114,6 +114,8 @@ local function create_tile_view(index, ti, ts, inRc, outSize,
 end
 
 local function imi_ongui()
+  imi.mouseCursor = MouseCursor.ARROW
+
   local spr = app.activeSprite
   if not spr then
     dlg:modify{ title=title }

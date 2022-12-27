@@ -382,15 +382,20 @@ imi._toggle = function(id, text)
         function(ctx)
           local widget = imi.widgets[id]
           local partId
+          local color
           if hasFlags(widget, WidgetFlags.PRESSED) or
              hasFlags(widget, WidgetFlags.CHECKED) then
             partId = 'button_selected'
+            color = app.theme.color.button_selected_text
           elseif hasFlags(widget, WidgetFlags.HOVER) then
             partId = 'button_hot'
+            color = app.theme.color.button_hot_text
           else
             partId = 'button_normal'
+            color = app.theme.color.button_normal_text
           end
           ctx:drawThemeRect(partId, bounds)
+          ctx.color = color
           ctx:fillText(text,
                        bounds.x+(bounds.width-textSize.width)/2,
                        bounds.y+(bounds.height-textSize.height)/2)

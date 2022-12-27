@@ -111,7 +111,7 @@ local widgetMt = {
 }
 
 local function advanceCursor(size, func)
-  if imi.alignRight then
+  if imi.alignLeft then
     imi.cursor.x = imi.cursor.x - size.width
   end
 

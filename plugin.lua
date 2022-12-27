@@ -101,14 +101,14 @@ local function create_tile_view(index, ti, ts, inRc, outSize,
     end
   end
 
-  imi.alignRight = true
+  imi.alignLeft = true
   if tilesHistogram[ti] == nil then
     imi.label("Unused")
   else
     imi.label(tostring(tilesHistogram[ti]))
   end
   imi.widget.color = Color(255, 255, 0)
-  imi.alignRight = false
+  imi.alignLeft = false
 
   imi.popID()
 end

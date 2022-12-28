@@ -3,6 +3,30 @@
 --
 -- This file is released under the terms of the MIT license.
 -- Read LICENSE.txt for more information.
+----------------------------------------------------------------------
+-- Extension Properties:
+--
+-- Layer = {
+--   categories={
+--     { id=0,
+--       name="Default",
+--       folders={
+--         { name="Folder Name"
+--           items={ tileIndex1, tileIndex2, ... }
+--         }
+--       },
+--     }, ...
+--   },
+--   defaultVisibleCategory=nil,
+-- }
+--
+-- Tile = {
+--   category=nil or categoryID,
+--   pivot=Point(0, 0),
+-- }
+----------------------------------------------------------------------
+
+local imi = dofile('./imi.lua')
 
 -- The main window/dialog
 local dlg
@@ -13,7 +37,9 @@ local shrunkenBounds = {} -- Minimal bounds between all tiles of the active laye
 local tilesHistogram = {} -- How many times each tile is used in the active layer
 local activeTileImageInfo = {} -- Used to re-calculate info when the tile image changes
 
-local imi = dofile('./imi.lua')
+-- Indicate if we should show all tiles (value=0) or only the ones
+-- from a specific category
+local showCategoryRadio = { value=1 }
 
 local function calculate_shrunken_bounds(tilemapLayer)
   assert(tilemapLayer.isTilemap)
@@ -51,71 +77,146 @@ local function get_active_tile_image()
   return nil
 end
 
--- Used to remove all checked images after adding the tiles to a new category
-local removeAllChecks = false
--- Indicate if we should show all tiles or only the ones from a specific category
-local showCategoryRadio = { value=0 }
-local categories = { }
-local editCategory = false
-local editCategoryItems = { }
+-- TODO replace this with built-in layer properties
+local layer_properties = {}
+local function get_layer_properties(layer)
+  local id = ""
+  local l = layer
+  while l ~= layer.sprite do
+    id = "/" .. l.name .. id
+    l = l.parent
+  end
+  if not layer_properties[id] then
+    layer_properties[id] = {
+      hasProperties=true,
+      categories={
+        { id=0, name="Default", folders={ } }
+      },
+    }
+  end
+  return layer_properties[id]
+end
 
-local function create_tile_view(index, ti, ts, inRc, outSize,
-                                cel, selectedTilesToAdd)
+-- TODO replace this with built-in tile properties
+local tile_properties = {}
+local function get_tile_properties(tile)
+  if not tile_properties[tile] then
+    tile_properties[tile] = { hasProperties=true }
+  end
+  return tile_properties[tile]
+end
+
+local function calculate_new_category_id(layers)
+  local maxId = 0
+  if layers == nil then
+    layers = app.activeSprite.layers
+  end
+  for _,layer in ipairs(layers) do
+    for _,category in ipairs(get_layer_properties(layer).categories) do
+      maxId = math.max(maxId, category.id)
+    end
+    if layer.layers then
+      maxId = math.max(maxId, calculate_new_category_id(layers))
+    end
+  end
+  return maxId
+end
+
+local function set_active_tile(ti)
+  if activeLayer and activeLayer.isTilemap then
+    local cel = activeLayer:cel(app.activeFrame)
+
+    -- Change tilemap tile if are not showing categories
+    -- We use Image:drawImage() to get undo information
+    if activeLayer and cel and cel.image then
+      local tilemapCopy = Image(cel.image)
+      tilemapCopy:putPixel(0, 0, ti)
+
+      -- This will trigger a Sprite_change() where we
+      -- re-calculate shrunkenBounds, tilesHistogram, etc.
+      cel.image:drawImage(tilemapCopy)
+    else
+      local image = Image(1, 1, ColorMode.TILEMAP)
+      image:putPixel(0, 0, ti)
+
+      cel = app.activeSprite:newCel(activeLayer, app.activeFrame, image, Point(0, 0))
+    end
+
+    imi.repaint = true
+    app.refresh()
+  end
+end
+
+local function create_tile_view(index, ti, ts, inRc, outSize)
   imi.pushID(index)
   local tileImg = ts:getTile(ti)
   imi.image(tileImg, inRc, outSize)
-
-  if imi.widget.hover then
-    hoverItems = true
+  if imi.beginDrag() then
+    imi.setDragData("tile", { index=index, ti=ti })
   end
 
-  if removeAllChecks then
+  if imi.widget.checked then
     imi.widget.checked = false
   end
 
-  if imi.widget.checked then -- When the image is clicked
-    if not editCategory then
-      imi.widget.checked = false
-
-      -- Change tilemap tile if are not showing categories
-      -- We use Image:drawImage() to get undo information
-      if cel and cel.image then
-        local tilemapCopy = Image(cel.image)
-        tilemapCopy:putPixel(0, 0, ti)
-
-        -- This will trigger a Sprite_change() where we
-        -- re-calculate shrunkenBounds, tilesHistogram, etc.
-        cel.image:drawImage(tilemapCopy)
-      else
-        local image = Image(1, 1, ColorMode.TILEMAP)
-        image:putPixel(0, 0, ti)
-
-        print('app.activeFrame=', app.activeFrame, 'ti=', ti)
-        cel = app.activeSprite:newCel(activeLayer, app.activeFrame, image, Point(0, 0))
-      end
-
-      imi.repaint = true
-      app.refresh()
-    elseif cel and cel.image then
-      table.insert(selectedTilesToAdd, ti)
-    end
-  end
-
-  imi.alignLeft = true
+  local label = ""
   if tilesHistogram[ti] == nil then
-    imi.label("Unused")
+    label = string.format("ID=%d / Unused", ti)
   else
-    imi.label(tostring(tilesHistogram[ti]))
+    label = string.format("ID=%d / %d", ti, tilesHistogram[ti])
   end
-  imi.widget.color = Color(255, 255, 0)
-  imi.alignLeft = false
+
+  if label then
+    imi.alignLeft = true
+    imi.label(label)
+    imi.widget.color = Color(255, 255, 0)
+    imi.alignLeft = false
+  end
 
   imi.popID()
 end
 
-local function imi_ongui()
-  imi.mouseCursor = MouseCursor.ARROW
+local function new_category_dialog()
+  local d =
+    Dialog("New Category Name")
+    :entry{ id="name", label="Name:", focus=true }
+    :button{ id="ok", text="OK", focus=true }
+    :button{ id="cancel", text="Cancel" }
+  dlg:repaint()
+  d:show()
+  local data = d.data
+  if data.ok and data.name ~= "" then
+    return {
+      id=calculate_new_category_id()+1,
+      name=data.name,
+      folders={ },
+    }
+  else
+    return nil
+  end
+end
 
+local function new_folder_dialog()
+  local d =
+    Dialog("New Folder Name")
+    :entry{ id="name", label="Name:", focus=true }
+    :button{ id="ok", text="OK", focus=true }
+    :button{ id="cancel", text="Cancel" }
+  dlg:repaint()
+  d:show()
+  local data = d.data
+  if data.ok and data.name ~= "" then
+    return {
+      name=data.name,
+      items={ },
+      folders={ },
+    }
+  else
+    return nil
+  end
+end
+
+local function imi_ongui()
   local spr = app.activeSprite
   if not spr then
     dlg:modify{ title=title }
@@ -123,6 +224,9 @@ local function imi_ongui()
   else
     dlg:modify{ title=title .. " - " .. app.fs.fileTitle(spr.filename) }
     if activeLayer then
+      local layerProperties = get_layer_properties(activeLayer)
+      local categories = layerProperties.categories
+
       local inRc = shrunkenBounds
       local outSize = Size(128, 128)
       if inRc.width < outSize.width and
@@ -134,124 +238,145 @@ local function imi_ongui()
         outSize.width = outSize.height * inRc.width / inRc.height
       end
 
-      -- All or Categories
+      -- Categories
 
       imi.sameLine = true
-      local allTiles = imi.radio("All", showCategoryRadio, 0)
-      local showCategoryItems = nil
+      local activeCategory = nil
       for i,category in ipairs(categories) do
         imi.pushID(i)
         if imi.radio(category.name, showCategoryRadio, i) then
-          showCategoryItems = { table.unpack(category.items) }
+          activeCategory = category
         end
         imi.popID()
       end
 
+      layerProperties.defaultVisibleCategory = showCategoryRadio.value
+
+      imi.space(4)
+      if imi.button("New Category") then
+        local category = new_category_dialog()
+        if category then
+          table.insert(categories, category)
+        end
+        imi.repaint = true
+        return
+      end
+
       imi.sameLine = false
 
-      -- List of tiles/attachments of the active layer
-      local selectedTilesToAdd = {}
-      local hoverItems = false
+      -- Active tile
 
       local ts = activeLayer.tileset
       local cel = activeLayer:cel(app.activeFrame)
       if cel and cel.image then
         local ti = cel.image:getPixel(0, 0)
         local tileImg = ts:getTile(ti)
+        -- Show active tile in active cel
         imi.image(tileImg, inRc, outSize)
+        if imi.beginDrag() then
+          imi.setDragData("tile", { index=0, ti=ti })
+        -- We can drop a tile here to change the tile in the activeCel
+        -- tilemap
+        elseif imi.beginDrop() then
+          local data = imi.getDropData("tile")
+          if data then
+            set_active_tile(data.ti)
+          end
+        end
+
         imi.sameLine = true
        end
 
+      -- List of tiles in current category
+
       imi.beginViewport(Size(imi.ctx.width - imi.cursor.x,
                              outSize.height))
+      if imi.beginDrop() then
+        local data = imi.getDropData("tile")
+        if data then
+          -- TODO reorder tiles in category
+        end
+      end
+
       imi.sameLine = true
       imi.breakLines = false
-      if allTiles then
-        for i=1,#ts do
-          create_tile_view(i, i, ts, inRc, outSize,
-                           cel, selectedTilesToAdd)
-        end
-      else
-        for i,ti in ipairs(showCategoryItems) do
-          create_tile_view(i, ti, ts, inRc, outSize,
-                           cel, selectedTilesToAdd)
+      for i=1,#ts do
+        if (activeCategory and
+            activeCategory.id == 0 or
+            get_tile_properties(i).category == activeCategory.id) then
+          create_tile_view(i, i, ts, inRc, outSize)
         end
       end
       imi.endViewport()
 
-      if removeAllChecks then
-        removeAllChecks = false
-      end
-
-      -- Categories
+      -- Folders
 
       imi.sameLine = false
-      editCategory = imi.toggle("Edit Category")
-      imi.sameLine = true
-      imi.breakLines = true
-      if editCategory then
-        imi.space(2)
-        local add = imi.button("Add")
-        local remove = imi.button("Remove")
-        local outSize2 = Size(outSize.width*3/4, outSize.height*3/4)
-        imi.sameLine = false
-        imi.beginViewport(Size(imi.ctx.width,
-                               outSize2.height))
-        imi.sameLine = true
-        imi.breakLines = false
-        local editSelectedItems = {}
-        for index,ti in ipairs(editCategoryItems) do
-          imi.pushID(index)
-          local tileImg = ts:getTile(ti)
-          if imi.image(tileImg, inRc, outSize2) then
-            table.insert(editSelectedItems, index)
+      if imi.button("New Folder") then
+        local folder = new_folder_dialog()
+        if folder then
+          table.insert(activeCategory.folders, folder)
+        end
+        imi.repaint = true
+        return
+      end
+
+      if activeCategory then
+        for i,folder in ipairs(activeCategory.folders) do
+          imi.pushID(i)
+          imi.sameLine = false
+          if imi.toggle(folder.name) then
+            -- One viewport for each opened folder
+            local outSize2 = Size(outSize.width*3/4, outSize.height*3/4)
+            imi.beginViewport(Size(imi.ctx.width,
+                                   outSize2.height))
+
+            if imi.beginDrop() then
+              local data = imi.getDropData("tile")
+              if data then
+                -- Drag-and-drop in the same folder, move the tile to the end
+                if data.folder == folder.name then
+                  table.remove(folder.items, data.index)
+                end
+                -- Drop a new item at the end of this folder
+                table.insert(folder.items, data.ti)
+                imi.repaint = true
+              end
+            end
+
+            imi.sameLine = true
+            imi.breakLines = false
+            for index,ti in ipairs(folder.items) do
+              imi.pushID(index)
+              local tileImg = ts:getTile(ti)
+              imi.image(tileImg, inRc, outSize2)
+
+              if imi.beginDrag() then
+                imi.setDragData("tile", { index=index, ti=ti, folder=folder.name })
+              elseif imi.beginDrop() then
+                local data = imi.getDropData("tile")
+                if data then
+                  -- Drag-and-drop in the same folder
+                  if data.folder == folder.name then
+                    table.remove(folder.items, data.index)
+                    table.insert(folder.items, index, data.ti)
+                  else
+                    -- Drag-and-drop between folders drops a new item
+                    -- in the "index" position of this folder
+                    table.insert(folder.items, index, data.ti)
+                  end
+                  imi.repaint = true
+                end
+              end
+
+              imi.widget.checked = false
+              imi.popID()
+            end
+            imi.endViewport()
           end
           imi.popID()
         end
-        imi.endViewport()
-
-        imi.sameLine = false
-        if #editCategoryItems > 0 and
-          imi.button("Save Category") then
-          local d =
-            Dialog("New Category Name")
-            :entry{ id="name", label="Name:", focus=true }
-            :button{ id="ok", text="OK", focus=true }
-            :button{ id="cancel", text="Cancel" }
-
-          dlg:repaint()
-
-          d:show()
-          local data = d.data
-          if data.ok then
-            local category = {
-              name=data.name,
-              items={ table.unpack(editCategoryItems) },
-            }
-            table.insert(categories, category)
-            imi.repaint = true
-          end
-        end
-
-        if add then
-          removeAllChecks = true
-          for _,ti in ipairs(selectedTilesToAdd) do
-            table.insert(editCategoryItems, ti)
-          end
-          imi.repaint = true
-        end
-        if remove then
-          for i=#editSelectedItems,1,-1 do
-            table.remove(editCategoryItems,
-                         editSelectedItems[i])
-            imi.repaint = true
-          end
-        end
       end
-    end
-
-    if hoverItems and not newCategory then
-      imi.mouseCursor = MouseCursor.POINTER
     end
   end
 end
@@ -328,6 +453,14 @@ local function App_sitechange(ev)
   if activeLayer ~= lay then
     activeLayer = lay
     if activeLayer and activeLayer.isTilemap then
+      do
+        local index = get_layer_properties(activeLayer).defaultVisibleCategory
+        if index == nil then
+          index = 1
+        end
+        showCategoryRadio = { value=index }
+      end
+
       shrunkenBounds = calculate_shrunken_bounds(activeLayer)
       tilesHistogram = calculate_tiles_histogram(activeLayer)
     else

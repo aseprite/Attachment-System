@@ -3,13 +3,53 @@
 --
 -- This file is released under the terms of the MIT license.
 -- Read LICENSE.txt for more information.
+----------------------------------------------------------------------
+-- Reference:
+--
+-- Initialization of the imi library:
+--
+--   imi.init{
+--     dialog=Dialog(...)
+--            :canvas{
+--               id="myCanvas",
+--               onpaint=imi.onpaint,
+--               onmousemove=imi.onmousemove,
+--               onmousedown=imi.onmousedown,
+--               onmouseup=imi.onmouseup },
+--     ongui=my_ongui,
+--     canvas="myCanvas" }
+--
+-- Widgets:
+--
+--   imi.label("Text")
+--   imi.image(image, srcRect, dstSize)
+--   imi.beginViewport(visibleAreaSize)
+--   imi.endViewport()
+--
+-- Drag-and-drop:
+--
+--   -- ...After creating a specific widget that can be dragged...
+--   if imi.beginDrag() then
+--     imi.setDragData("dataType", data)
+--   end
+--
+--   -- ...After creating a specific widget where we can drop data...
+--   if imi.beginDrop() then
+--     local data = imi.getDropData("dataType")
+--     if data then
+--       ...
+--     end
+--   end
+--
+----------------------------------------------------------------------
 
 local imi = {
   dlg = nil,
   mousePos = Point(0, 0),
   mouseButton = 0,
   widgets = {},
-  capturedWidget = nil,
+  capturedWidget = nil, -- Captured widget (when we pressed and are dragging the mouse)
+  targetWidget = nil,   -- Where we drop the capturedWidget
   drawList = {},
   lineHeight = 0,
 }
@@ -24,6 +64,7 @@ local WidgetFlags = {
   FOCUSED = 4,
   CHECKED = 8,
   HOVER = 16,
+  DRAGGING = 32,
 }
 
 local function clamp(value, min, max)
@@ -88,12 +129,17 @@ local flagNames = {
   focused=WidgetFlags.FOCUSED,
   checked=WidgetFlags.CHECKED,
   hover=WidgetFlags.HOVER,
+  dragging=WidgetFlags.DRAGGING,
 }
 local widgetMt = {
   __index=function(t, field)
     local widget = imi.widgets[imi.lastID]
     local flag = flagNames[field]
-    return hasFlags(widget, flag)
+    if flag then
+      return hasFlags(widget, flag)
+    else
+      return rawget(widget, field)
+    end
   end,
   __newindex=function(t, field, value)
     local widget = imi.widgets[imi.lastID]
@@ -104,8 +150,8 @@ local widgetMt = {
       else
         resetFlags(widget, flag)
       end
-    elseif field == "color" then
-      widget.color = value
+    else
+      rawset(widget, field, value)
     end
   end
 }
@@ -160,6 +206,8 @@ local function pointInsideWidgetHierarchy(widget, pos)
 end
 
 local function updateWidget(id, values)
+  values.id = id
+
   -- Set the current viewport (or nil) as the parent of this widget
   -- TODO generalize this to any kind of container widget
   values.parent = imi.viewportWidget
@@ -173,7 +221,8 @@ local function updateWidget(id, values)
   end
 
   -- Add this widget to the list of mouseWidgets if it's in mousePos
-  if pointInsideWidgetHierarchy(imi.widgets[id], imi.mousePos) then
+  if not hasFlags(imi.widgets[id], WidgetFlags.DRAGGING) and
+     pointInsideWidgetHierarchy(imi.widgets[id], imi.mousePos) then
     table.insert(imi.mouseWidgets, id)
   end
 end
@@ -224,12 +273,18 @@ imi.onpaint = function(ev)
 
   imi.repaint = true
   while imi.repaint do
-    initVars(ctx)
+    initVars(ctx) -- set imi.repaint=false
 
     if imi.ongui then
+      local hadTargetWidget = (imi.targetWidget ~= nil)
+
       imi.isongui = true
       imi.ongui()
       imi.isongui = false
+
+      if hadTargetWidget then
+        imi.targetWidget = nil
+      end
     end
 
     for _,f in ipairs(imi.afterOnGui) do
@@ -265,34 +320,38 @@ end
 imi.onmousemove = function(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = ev.button
+  imi.repaint = false
 
-  local repaint = false
   for id,widget in pairs(imi.widgets) do
     if widget.bounds then
       if widget.onmousemove then
         widget.onmousemove()
       end
+      if hasFlags(widget, WidgetFlags.DRAGGING) then
+        imi.repaint = true
+      end
       if pointInsideWidgetHierarchy(widget, imi.mousePos) then
         if not hasFlags(widget, WidgetFlags.HOVER) then
           setFlags(widget, WidgetFlags.HOVER)
-          repaint = true
+          imi.repaint = true
         end
       elseif hasFlags(widget, WidgetFlags.HOVER) then
         resetFlags(widget, WidgetFlags.HOVER)
-        repaint = true
+        imi.repaint = true
       end
     end
   end
-  if repaint then
+  if imi.repaint then
     imi.dlg:repaint()
   end
 
-  imi.dlg:modify{ id="canvas", mouseCursor=imi.mouseCursor }
+  imi.dlg:modify{ id=imi.canvasId, mouseCursor=imi.mouseCursor }
 end
 
 imi.onmousedown = function(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = ev.button
+  imi.repaint = false
 
   for _,id in ipairs(imi.mouseWidgets) do
     local widget = imi.widgets[id]
@@ -303,29 +362,42 @@ imi.onmousedown = function(ev)
       if hasFlags(widget, WidgetFlags.HOVER) then
         imi.capturedWidget = widget
         setFlags(widget, WidgetFlags.PRESSED)
-        imi.dlg:repaint()
+        imi.repaint = true
       end
     end
+  end
+
+  if imi.repaint then
+    imi.dlg:repaint()
   end
 end
 
 imi.onmouseup = function(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = 0
+  imi.repaint = false
+
   if imi.capturedWidget then
     local widget = imi.capturedWidget
     if widget.onmouseup then
       widget.onmouseup()
     end
     if hasFlags(widget, WidgetFlags.PRESSED) then
-      resetFlags(widget, WidgetFlags.PRESSED)
+      if hasFlags(widget, WidgetFlags.DRAGGING) then
+        imi.targetWidget = imi.widgets[imi.mouseWidgets[#imi.mouseWidgets]]
+      end
+      resetFlags(widget, WidgetFlags.PRESSED | WidgetFlags.DRAGGING)
       xorFlags(widget, WidgetFlags.CHECKED)
-      imi.dlg:repaint()
+      imi.repaint = true
     end
     imi.capturedWidget = nil
   end
 
-  imi.dlg:modify{ id="canvas", mouseCursor=imi.mouseCursor }
+  if imi.repaint then
+    imi.dlg:repaint()
+  end
+
+  imi.dlg:modify{ id=imi.canvasId, mouseCursor=imi.mouseCursor }
 end
 
 imi.pushID = function(id)
@@ -338,8 +410,10 @@ end
 
 imi.getID = function()
   local id = debug.getinfo(3, "l").currentline
-  if #imi.idStack > 0 then
-    id = id + 100000*imi.idStack[#imi.idStack]
+  local level = 10000
+  for i=1,#imi.idStack do
+    id = id + level*imi.idStack[i]
+    level = level*level
   end
   imi.lastID = id
   return id
@@ -349,7 +423,7 @@ imi.space = function(width)
   advanceCursor(
     Size(width, 1),
     function(bounds)
-      -- Do nothing
+      -- Do nothing, we only needed to move imi.cursor
     end)
 end
 
@@ -459,19 +533,32 @@ imi.image = function(image, srcRect, dstSize)
       -- Draw this widget only if it's visible through the current
       -- viewport (if we are in a viewport)
       if insideViewport(bounds) then
-        addDrawListFunction(
-          function()
-            local widget = imi.widgets[id]
-            imi.ctx:drawImage(image, srcRect, bounds)
-            if hasFlags(widget, WidgetFlags.PRESSED) or
-               hasFlags(widget, WidgetFlags.CHECKED) then
-              imi.ctx:drawThemeRect('colorbar_selection_hot',
-                                    widget.bounds)
-            elseif hasFlags(widget, WidgetFlags.HOVER) then
-              imi.ctx:drawThemeRect('colorbar_selection',
-                                    widget.bounds)
-            end
-          end)
+        local draggingProcessed = false
+
+        local function drawWidget()
+          local ctx = imi.ctx
+          local widget = imi.widgets[id]
+
+          if hasFlags(widget, WidgetFlags.DRAGGING) and
+             not draggingProcessed then
+            draggingProcessed = true
+            -- Send this same widget to the end to draw it in the
+            -- dragged position (and without clipping)
+            addDrawListFunction(drawWidget)
+          end
+
+          ctx:drawImage(image, srcRect, bounds)
+          if hasFlags(widget, WidgetFlags.PRESSED) or
+            hasFlags(widget, WidgetFlags.CHECKED) then
+            ctx:drawThemeRect('colorbar_selection_hot',
+                              widget.bounds)
+          elseif hasFlags(widget, WidgetFlags.HOVER) then
+            ctx:drawThemeRect('colorbar_selection',
+                              widget.bounds)
+          end
+        end
+
+        addDrawListFunction(drawWidget)
       end
     end)
   return hasFlags(imi.widgets[id], WidgetFlags.CHECKED)
@@ -624,6 +711,53 @@ imi.endViewport = function()
   table.insert(imi.drawList, { type="restore" })
   imi.viewportWidget = nil
   imi.scrollableBounds = nil
+end
+
+imi.beginDrag = function()
+  if imi.widget.pressed then
+    if imi.widget.dragging then
+      local pt = imi.widget.bounds.origin
+      local delta = imi.mousePos - dragStartMousePos
+      pt = pt + (imi.mousePos - dragStartMousePos)
+      if imi.widget.bounds.origin ~= pt then
+        local id = imi.lastID
+        addDrawListFunction(
+          function()
+            imi.widgets[id].bounds.origin = pt
+          end)
+      end
+    else
+      dragStartMousePos = imi.mousePos
+      imi.widget.dragging = true
+    end
+    return true
+  else
+    return false
+  end
+end
+
+imi.setDragData = function(dataType, data)
+  if imi.dragData == nil then
+    imi.dragData = {}
+  end
+  imi.dragData[dataType] = data
+end
+
+imi.beginDrop = function()
+  if imi.targetWidget and
+     imi.targetWidget.id == imi.lastID then
+    imi.targetWidget = nil
+    return true
+  end
+  return false
+end
+
+imi.getDropData = function(dataType)
+  if imi.dragData then
+    return imi.dragData[dataType]
+  else
+    return nil
+  end
 end
 
 return imi

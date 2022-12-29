@@ -36,6 +36,8 @@ local activeLayer
 local shrunkenBounds = {} -- Minimal bounds between all tiles of the active layer
 local tilesHistogram = {} -- How many times each tile is used in the active layer
 local activeTileImageInfo = {} -- Used to re-calculate info when the tile image changes
+local showTilesID = false
+local showTilesUsage = false
 
 -- Indicate if we should show all tiles (value=0) or only the ones
 -- from a specific category
@@ -159,18 +161,28 @@ local function create_tile_view(index, ti, ts, inRc, outSize)
     imi.widget.checked = false
   end
 
-  local label = ""
-  if tilesHistogram[ti] == nil then
-    label = string.format("ID=%d / Unused", ti)
-  else
-    label = string.format("ID=%d / %d", ti, tilesHistogram[ti])
+  if showTilesID then
+    imi.alignFunc = function(cursor, size, lastBounds)
+      return Point(lastBounds.x,
+		   lastBounds.y+lastBounds.height-size.height)
+    end
+    imi.label(string.format("[%d]", ti))
+    imi.widget.color = Color(255, 255, 0)
+    imi.alignFunc = nil
   end
-
-  if label then
-    imi.alignLeft = true
+  if showTilesUsage then
+    local label
+    if tilesHistogram[ti] == nil then
+      label = "Unused"
+    else
+      label = tostring(tilesHistogram[ti])
+    end
+    imi.alignFunc = function(cursor, size, lastBounds)
+      return lastBounds.origin
+    end
     imi.label(label)
     imi.widget.color = Color(255, 255, 0)
-    imi.alignLeft = false
+    imi.alignFunc = nil
   end
 
   imi.popID()
@@ -261,6 +273,10 @@ local function imi_ongui()
         imi.repaint = true
         return
       end
+
+      imi.space(4)
+      showTilesID = imi.toggle("Show ID")
+      showTilesUsage = imi.toggle("Show Usage")
 
       imi.sameLine = false
 

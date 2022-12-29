@@ -85,6 +85,7 @@ local function initVars(ctx)
   imi.layoutStack = {}
   imi.afterOnGui = {}
   imi.lastID = nil -- Last inserted widget ID
+  imi.lastBounds = nil
   imi.repaint = false
 
   -- List of widget IDs inside mousePos, useful to send mouse events
@@ -157,8 +158,9 @@ local widgetMt = {
 }
 
 local function advanceCursor(size, func)
-  if imi.alignLeft then
-    imi.cursor.x = imi.cursor.x - size.width
+  local oldCursor = imi.cursor
+  if imi.alignFunc then
+    imi.cursor = imi.alignFunc(imi.cursor, size, imi.lastBounds)
   end
 
   if not imi.sameLine or
@@ -180,7 +182,19 @@ local function advanceCursor(size, func)
   if imi.rowHeight < size.height then
     imi.rowHeight = size.height
   end
-  imi.cursor.x = imi.cursor.x + size.width
+
+  -- Restore the old cursor position if we've used a customized
+  -- alignment function
+  if imi.alignFunc then
+    imi.cursor = oldCursor
+  -- In other way just advance the cursor to the next position (in the
+  -- same row)
+  else
+    -- Update last bounds only when a custom alignment function is not
+    -- used
+    imi.lastBounds = bounds
+    imi.cursor.x = imi.cursor.x + size.width
+  end
 end
 
 local function addDrawListFunction(callback)

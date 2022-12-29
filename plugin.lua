@@ -38,6 +38,7 @@ local tilesHistogram = {} -- How many times each tile is used in the active laye
 local activeTileImageInfo = {} -- Used to re-calculate info when the tile image changes
 local showTilesID = false
 local showTilesUsage = false
+local zoom = 1.0
 
 -- Indicate if we should show all tiles (value=0) or only the ones
 -- from a specific category
@@ -249,6 +250,8 @@ local function imi_ongui()
       else
         outSize.width = outSize.height * inRc.width / inRc.height
       end
+      outSize.width = outSize.width * zoom
+      outSize.height = outSize.height * zoom
 
       -- Categories
 
@@ -418,6 +421,18 @@ local function Sprite_change()
   end
 end
 
+local function canvas_onwheel(ev)
+  zoom = zoom - ev.deltaY/32.0
+  if zoom < 0.5 then zoom = 0.5 end
+  dlg:repaint()
+end
+
+local function canvas_ontouchmagnify(ev)
+  zoom = zoom + zoom*ev.magnification
+  if zoom < 0.5 then zoom = 0.5 end
+  dlg:repaint()
+end
+
 local function Sprite_remaptileset(ev)
   -- TODO add this check when category information is undone/redone
   --if not ev.fromUndo then
@@ -510,7 +525,9 @@ local function AttachmentWindow_SwitchWindow()
                onpaint=imi.onpaint,
                onmousemove=imi.onmousemove,
                onmousedown=imi.onmousedown,
-               onmouseup=imi.onmouseup }
+               onmouseup=imi.onmouseup,
+               onwheel=canvas_onwheel,
+               ontouchmagnify=canvas_ontouchmagnify }
     imi.init{ dialog=dlg,
               ongui=imi_ongui,
               canvas="canvas" }

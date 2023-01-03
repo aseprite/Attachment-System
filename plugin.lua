@@ -289,8 +289,11 @@ local function imi_ongui()
 
       local ts = activeLayer.tileset
       local cel = activeLayer:cel(app.activeFrame)
+      local ti = 0
       if cel and cel.image then
-        local ti = cel.image:getPixel(0, 0)
+        ti = cel.image:getPixel(0, 0)
+      end
+      do
         local tileImg = ts:getTile(ti)
         -- Show active tile in active cel
         imi.image(tileImg, inRc, outSize)

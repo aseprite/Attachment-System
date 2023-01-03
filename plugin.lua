@@ -1,5 +1,5 @@
 -- Aseprite Attachment System
--- Copyright (c) 2022  Igara Studio S.A.
+-- Copyright (c) 2022-2023  Igara Studio S.A.
 --
 -- This file is released under the terms of the MIT license.
 -- Read LICENSE.txt for more information.
@@ -150,12 +150,20 @@ local function set_active_tile(ti)
   end
 end
 
-local function create_tile_view(index, ti, ts, inRc, outSize)
+local function create_tile_view(index, ti, ts, inRc, outSize,
+                                activeCategory)
   imi.pushID(index)
   local tileImg = ts:getTile(ti)
   imi.image(tileImg, inRc, outSize)
   if imi.beginDrag() then
     imi.setDragData("tile", { index=index, ti=ti })
+  end
+  if imi.beginDrop() then
+    -- TODO reorder tiles in category
+    local data = imi.getDropData("tile")
+    if data then
+      get_tile_properties(ti).category = activeCategory.id
+    end
   end
 
   if imi.widget.checked then
@@ -319,6 +327,7 @@ local function imi_ongui()
         local data = imi.getDropData("tile")
         if data then
           -- TODO reorder tiles in category
+          get_tile_properties(data.ti).category = activeCategory.id
         end
       end
 
@@ -328,7 +337,7 @@ local function imi_ongui()
         if (activeCategory and
             activeCategory.id == 0 or
             get_tile_properties(i).category == activeCategory.id) then
-          create_tile_view(i, i, ts, inRc, outSize)
+          create_tile_view(i, i, ts, inRc, outSize, activeCategory)
         end
       end
       imi.endViewport()

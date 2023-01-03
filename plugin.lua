@@ -119,7 +119,7 @@ local function calculate_new_category_id(layers)
       maxId = math.max(maxId, category.id)
     end
     if layer.layers then
-      maxId = math.max(maxId, calculate_new_category_id(layers))
+      maxId = math.max(maxId, calculate_new_category_id(layer.layers))
     end
   end
   return maxId

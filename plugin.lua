@@ -233,6 +233,8 @@ local function imi_ongui()
   local spr = app.activeSprite
   if not spr then
     dlg:modify{ title=title }
+
+    imi.ctx.color = app.theme.color.text
     imi.label("No sprite")
   else
     dlg:modify{ title=title .. " - " .. app.fs.fileTitle(spr.filename) }

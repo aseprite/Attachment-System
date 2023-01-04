@@ -533,6 +533,8 @@ local function dialog_onclose()
 end
 
 local function AttachmentWindow_SwitchWindow()
+  if app.apiVersion < 21 then return app.alert "The Attachment System plugin needs Aseprite v1.3.0-rc1" end
+
   if dlg then
     dlg:close()
   else

@@ -526,14 +526,20 @@ local function App_sitechange(ev)
   end
 end
 
+local function dialog_onclose()
+  unobserve_sprite()
+  app.events:off(App_sitechange)
+  dlg = nil
+end
+
 local function AttachmentWindow_SwitchWindow()
   if dlg then
-    unobserve_sprite()
-    app.events:off(App_sitechange)
     dlg:close()
-    dlg = nil
   else
-    dlg = Dialog(title)
+    dlg = Dialog{
+        title=title,
+        onclose=dialog_onclose
+      }
       :canvas{ id="canvas",
                width=400, height=300,
                onpaint=imi.onpaint,

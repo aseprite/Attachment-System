@@ -15,9 +15,9 @@
 --           items={ tileIndex1, tileIndex2, ... }
 --         }
 --       },
---     }, ...
+--     },
+--     ...
 --   },
---   defaultVisibleCategory=nil,
 -- }
 --
 -- Tile = {
@@ -27,6 +27,10 @@
 ----------------------------------------------------------------------
 
 local imi = dofile('./imi.lua')
+
+-- Plugin-key to access extension properties in layers/tiles/etc.
+-- E.g. layer.properties(PK)
+local PK = "aseprite/Attachment-System"
 
 -- The main window/dialog
 local dlg
@@ -39,6 +43,9 @@ local activeTileImageInfo = {} -- Used to re-calculate info when the tile image 
 local showTilesID = false
 local showTilesUsage = false
 local zoom = 1.0
+
+-- Default category visible for each layer (key=layer.id, value=index of the category)
+local defaultVisibleCategory = {}
 
 -- Indicate if we should show all tiles (value=0) or only the ones
 -- from a specific category
@@ -80,24 +87,18 @@ local function get_active_tile_image()
   return nil
 end
 
--- TODO replace this with built-in layer properties
-local layer_properties = {}
 local function get_layer_properties(layer)
-  local id = ""
-  local l = layer
-  while l ~= layer.sprite do
-    id = "/" .. l.name .. id
-    l = l.parent
-  end
-  if not layer_properties[id] then
-    layer_properties[id] = {
-      hasProperties=true,
+  local properties = layer.properties(PK)
+  if not properties.categories then
+    -- Don't modify properties.categories = { ... } do avoid creating
+    -- an undoable transaction here, here we just return a table.
+    properties = {
       categories={
         { id=0, name="Default", folders={ } }
-      },
+      }
     }
   end
-  return layer_properties[id]
+  return properties
 end
 
 -- TODO replace this with built-in tile properties
@@ -275,13 +276,16 @@ local function imi_ongui()
         imi.popID()
       end
 
-      layerProperties.defaultVisibleCategory = showCategoryRadio.value
+      if defaultVisibleCategory[activeLayer.id] ~= showCategoryRadio.value then
+        defaultVisibleCategory[activeLayer.id] = showCategoryRadio.value
+      end
 
       imi.space(4)
       if imi.button("New Category") then
         local category = new_category_dialog()
         if category then
           table.insert(categories, category)
+          activeLayer.properties(PK).categories = categories
         end
         imi.repaint = true
         return
@@ -349,6 +353,7 @@ local function imi_ongui()
         local folder = new_folder_dialog()
         if folder then
           table.insert(activeCategory.folders, folder)
+          activeLayer.properties(PK).categories = categories
         end
         imi.repaint = true
         return
@@ -373,6 +378,7 @@ local function imi_ongui()
                 end
                 -- Drop a new item at the end of this folder
                 table.insert(folder.items, data.ti)
+                activeLayer.properties(PK).categories = categories
                 imi.repaint = true
               end
             end
@@ -398,6 +404,7 @@ local function imi_ongui()
                     -- in the "index" position of this folder
                     table.insert(folder.items, index, data.ti)
                   end
+                  activeLayer.properties(PK).categories = categories
                   imi.repaint = true
                 end
               end
@@ -414,7 +421,9 @@ local function imi_ongui()
   end
 end
 
-local function Sprite_change()
+local function Sprite_change(ev)
+  local repaint = ev.fromUndo
+
   if activeLayer and activeLayer.isTilemap then
     local tileImg = get_active_tile_image()
     if tileImg and
@@ -427,11 +436,15 @@ local function Sprite_change()
       shrunkenBounds = calculate_shrunken_bounds(activeLayer)
       tilesHistogram = calculate_tiles_histogram(activeLayer)
       if not imi.isongui then
-        imi.dlg:repaint()
+        repaint = true
       end
     else
       activeTileImageInfo = {}
     end
+  end
+
+  if repaint then
+    imi.dlg:repaint()
   end
 end
 
@@ -448,22 +461,28 @@ local function canvas_ontouchmagnify(ev)
 end
 
 local function Sprite_remaptileset(ev)
-  -- TODO add this check when category information is undone/redone
-  --if not ev.fromUndo then
+  -- If the action came from an undo/redo, the properties are restored
+  -- automatically to the old/new value, we don't have to readjust
+  -- them.
+  if not ev.fromUndo and activeLayer then
+    local layerProperties = get_layer_properties(activeLayer)
+    local categories = layerProperties.categories
 
     for _,category in ipairs(categories) do
-      local newItems = {}
-      io.write("old: ")
-      for k=1,#category.items do
-        newItems[k] = ev.remap[category.items[k]]
+      for _,folder in ipairs(category.folders) do
+        local newItems = {}
+        for k=1,#folder.items do
+          newItems[k] = ev.remap[folder.items[k]]
+        end
+        folder.items = newItems
       end
-      -- TODO this change of property values must be integrated in the
-      --      current undo transaction
-      category.items = newItems
     end
 
-  --end
-  dlg:repaint()
+    -- This generates the undo information for first time in the
+    -- current transaction (within the Remap command)
+    activeLayer.properties(PK).categories = categories
+    dlg:repaint()
+  end
 end
 
 local function unobserve_sprite()
@@ -499,7 +518,7 @@ local function App_sitechange(ev)
     activeLayer = lay
     if activeLayer and activeLayer.isTilemap then
       do
-        local index = get_layer_properties(activeLayer).defaultVisibleCategory
+        local index = defaultVisibleCategory[activeLayer.id]
         if index == nil then
           index = 1
         end

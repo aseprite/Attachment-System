@@ -449,9 +449,32 @@ local function Sprite_change(ev)
 end
 
 local function canvas_onwheel(ev)
-  zoom = zoom - ev.deltaY/32.0
-  if zoom < 0.5 then zoom = 0.5 end
-  dlg:repaint()
+  if ev.ctrlKey then
+    if ev.shiftKey then
+      zoom = zoom - ev.deltaY/2.0
+    else
+      zoom = zoom - ev.deltaY/32.0
+    end
+    if zoom < 0.5 then zoom = 0.5 end
+    dlg:repaint()
+  else
+    if #imi.mouseWidgets > 0 then
+      local widget = imi.mouseWidgets[1]
+      if widget.scrollPos then
+        local dx = ev.deltaY
+        if ev.shiftKey then
+          dx = widget.bounds.width*3/4*dx
+        else
+          dx = 64*dx
+        end
+        widget.scrollPos.x = widget.scrollPos.x + dx
+        if widget.scrollPos.x < 0 then
+          widget.scrollPos.x = 0
+        end
+        dlg:repaint()
+      end
+    end
+  end
 end
 
 local function canvas_ontouchmagnify(ev)

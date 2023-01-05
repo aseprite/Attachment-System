@@ -243,7 +243,7 @@ local dragStartScrollPos = Point(0, 0)
 local dragStartScrollBarPos = 0
 
 local function getScrollInfo(widget)
-  local fullLen = widget.viewportSize.width-4
+  local fullLen = widget.viewportSize.width-3*imi.uiScale
   local len = fullLen
   local pos = widget.scrollPos.x
   if widget.scrollableSize.width <= widget.viewportSize.width then
@@ -704,8 +704,10 @@ imi.endViewport = function()
       local info = getScrollInfo(widget)
 
       imi.ctx:drawThemeRect(bgPart,
-                            bounds.x+border, bounds.y+bounds.height-barSize-border,
-                            bounds.width-2*border, barSize)
+                            bounds.x+border,
+                            bounds.y+bounds.height-barSize-border-1*imi.uiScale,
+                            bounds.width-2*border+1*imi.uiScale,
+                            barSize+1*imi.uiScale)
       imi.ctx:drawThemeRect(thumbPart,
                             bounds.x+border+info.pos,
                             bounds.y+bounds.height-barSize-border-1*imi.uiScale,

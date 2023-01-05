@@ -1,5 +1,5 @@
 -- Aseprite Immediate Mode GUI library
--- Copyright (c) 2022  Igara Studio S.A.
+-- Copyright (c) 2022-2023  Igara Studio S.A.
 --
 -- This file is released under the terms of the MIT license.
 -- Read LICENSE.txt for more information.
@@ -74,6 +74,7 @@ end
 -- Reset these variables before calling ongui()
 local function initVars(ctx)
   imi.ctx = ctx
+  imi.uiScale = app.preferences.general.ui_scale
   imi.lineHeight = ctx:measureText(" ").height
   imi.mouseCursor = MouseCursor.ARROW
   imi.cursor = Point(0, 0)
@@ -455,7 +456,8 @@ end
 
 imi._toggle = function(id, text)
   local textSize = imi.ctx:measureText(text)
-  local size = Size(textSize.width+32, textSize.height+8)
+  local size = Size(textSize.width+32*imi.uiScale,
+                    textSize.height+8*imi.uiScale)
   advanceCursor(
     size,
     function(bounds)
@@ -575,8 +577,9 @@ end
 imi.beginViewport = function(size)
   local id = imi.getID()
 
+  local border = 4*imi.uiScale -- TODO access theme styles
   local barSize = app.theme.dimension.mini_scrollbar_size
-  size.height = size.height + 8 + barSize
+  size.height = size.height + 2*border + barSize
 
   local function onmousemove()
     local widget = imi.widgets[id]
@@ -602,7 +605,7 @@ imi.beginViewport = function(size)
     else
       local oldHoverHBar = widget.hoverHBar
       widget.hoverHBar =
-        (imi.mousePos.y >= bounds.y+bounds.height-barSize-4 and
+        (imi.mousePos.y >= bounds.y+bounds.height-barSize-4*imi.uiScale and
          imi.mousePos.y <= bounds.y+bounds.height)
       if oldHoverHBar ~= widget.hoverHBar then
         imi.dlg:repaint()
@@ -649,8 +652,8 @@ imi.beginViewport = function(size)
       end
 
       imi.viewportWidget = widget
-      imi.viewport = Rectangle(bounds.x+4, bounds.y+4,
-                               bounds.width-8, bounds.height-8-barSize)
+      imi.viewport = Rectangle(bounds.x+border, bounds.y+border,
+                               bounds.width-2*border, bounds.height-2*border-barSize)
     end)
 
   table.insert(
@@ -674,10 +677,11 @@ imi.endViewport = function()
 
   local pop = imi.layoutStack[#imi.layoutStack]
 
+  local border = 4*imi.uiScale -- TODO access theme styles
   local barSize = app.theme.dimension.mini_scrollbar_size
   widget.scrollableSize = imi.scrollableBounds.size
-  widget.viewportSize = Size(bounds.width-4,
-                             bounds.height-barSize-5)
+  widget.viewportSize = Size(bounds.width-border,
+                             bounds.height-barSize-border-1*imi.uiScale)
 
   imi.cursor = pop.cursor
   imi.drawList = pop.drawList
@@ -700,19 +704,20 @@ imi.endViewport = function()
       local info = getScrollInfo(widget)
 
       imi.ctx:drawThemeRect(bgPart,
-                            bounds.x+4, bounds.y+bounds.height-barSize-4,
-                            bounds.width-8, barSize)
+                            bounds.x+border, bounds.y+bounds.height-barSize-border,
+                            bounds.width-2*border, barSize)
       imi.ctx:drawThemeRect(thumbPart,
-                            bounds.x+4+info.pos, bounds.y+bounds.height-barSize-5,
+                            bounds.x+border+info.pos,
+                            bounds.y+bounds.height-barSize-border-1*imi.uiScale,
                             info.len, barSize)
     end)
 
   table.insert(imi.drawList, { type="save" })
   table.insert(imi.drawList, { type="clip",
-                               bounds=Rectangle(bounds.x+4,
-                                                bounds.y+4,
-                                                bounds.width-8,
-                                                bounds.height-8) })
+                               bounds=Rectangle(bounds.x+border,
+                                                bounds.y+border,
+                                                bounds.width-2*border,
+                                                bounds.height-2*border) })
   for i,cmd in ipairs(subDrawList) do
     table.insert(imi.drawList, cmd)
   end

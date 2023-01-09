@@ -45,6 +45,7 @@
 
 local imi = {
   dlg = nil,
+  uiScale = app.preferences.general.ui_scale,
   mousePos = Point(0, 0),
   mouseButton = 0,
   widgets = {},

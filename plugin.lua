@@ -585,7 +585,7 @@ local function AttachmentWindow_SwitchWindow()
         onclose=dialog_onclose
       }
       :canvas{ id="canvas",
-               width=400, height=300,
+               width=400*imi.uiScale, height=300*imi.uiScale,
                onpaint=imi.onpaint,
                onmousemove=imi.onmousemove,
                onmousedown=imi.onmousedown,

@@ -470,13 +470,13 @@ imi._toggle = function(id, text)
           local color
           if widget.pressed or
              widget.checked then
-            partId = 'button_selected'
+            partId = 'buttonset_item_pushed'
             color = app.theme.color.button_selected_text
           elseif widget.hover then
-            partId = 'button_hot'
+            partId = 'buttonset_item_hot'
             color = app.theme.color.button_hot_text
           else
-            partId = 'button_normal'
+            partId = 'buttonset_item_normal'
             color = app.theme.color.button_normal_text
           end
           ctx:drawThemeRect(partId, bounds)

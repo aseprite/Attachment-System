@@ -420,10 +420,8 @@ end
 
 function imi.getID()
   local id = debug.getinfo(3, "l").currentline
-  local level = 10000
   for i=1,#imi.idStack do
-    id = id + level*imi.idStack[i]
-    level = level*level
+    id = id .. "," .. imi.idStack[i]
   end
   imi.lastID = id
   return id

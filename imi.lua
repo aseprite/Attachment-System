@@ -271,14 +271,14 @@ end
 -- Public API
 ----------------------------------------------------------------------
 
-imi.init = function(values)
+function imi.init(values)
   imi.dlg = values.dialog
   imi.ongui = values.ongui
   imi.canvasId = values.canvas
   imi.widget = nil
 end
 
-imi.onpaint = function(ev)
+function imi.onpaint(ev)
   local ctx = ev.context
 
   imi.repaint = true
@@ -327,7 +327,7 @@ imi.onpaint = function(ev)
   imi.drawList = {}
 end
 
-imi.onmousemove = function(ev)
+function imi.onmousemove(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = ev.button
   imi.repaint = false
@@ -358,7 +358,7 @@ imi.onmousemove = function(ev)
   imi.dlg:modify{ id=imi.canvasId, mouseCursor=imi.mouseCursor }
 end
 
-imi.onmousedown = function(ev)
+function imi.onmousedown(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = ev.button
   imi.repaint = false
@@ -381,7 +381,7 @@ imi.onmousedown = function(ev)
   end
 end
 
-imi.onmouseup = function(ev)
+function imi.onmouseup(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = 0
   imi.repaint = false
@@ -410,15 +410,15 @@ imi.onmouseup = function(ev)
   imi.dlg:modify{ id=imi.canvasId, mouseCursor=imi.mouseCursor }
 end
 
-imi.pushID = function(id)
+function imi.pushID(id)
   table.insert(imi.idStack, id)
 end
 
-imi.popID = function()
+function imi.popID()
   table.remove(imi.idStack)
 end
 
-imi.getID = function()
+function imi.getID()
   local id = debug.getinfo(3, "l").currentline
   local level = 10000
   for i=1,#imi.idStack do
@@ -429,7 +429,7 @@ imi.getID = function()
   return id
 end
 
-imi.space = function(width)
+function imi.space(width)
   advanceCursor(
     Size(width, 1),
     function(bounds)
@@ -437,7 +437,7 @@ imi.space = function(width)
     end)
 end
 
-imi.label = function(text)
+function imi.label(text)
   local id = imi.getID()
   local textSize = imi.ctx:measureText(text)
   advanceCursor(
@@ -455,7 +455,7 @@ imi.label = function(text)
     end)
 end
 
-imi._toggle = function(id, text)
+function imi._toggle(id, text)
   local textSize = imi.ctx:measureText(text)
   local size = Size(textSize.width+32*imi.uiScale,
                     textSize.height+8*imi.uiScale)
@@ -489,12 +489,12 @@ imi._toggle = function(id, text)
   return imi.widgets[id].checked
 end
 
-imi.toggle = function(text)
+function imi.toggle(text)
   local id = imi.getID()
   return imi._toggle(id, text)
 end
 
-imi.button = function(text)
+function imi.button(text)
   local id = imi.getID()
   local result = imi._toggle(id, text)
   if result then
@@ -503,7 +503,7 @@ imi.button = function(text)
   return result
 end
 
-imi.radio = function(text, t, thisValue)
+function imi.radio(text, t, thisValue)
   local id = imi.getID()
 
   addAfterOnGui(
@@ -534,7 +534,7 @@ imi.radio = function(text, t, thisValue)
   return t.value == thisValue
 end
 
-imi.image = function(image, srcRect, dstSize)
+function imi.image(image, srcRect, dstSize)
   local id = imi.getID()
   advanceCursor(
     dstSize,
@@ -575,7 +575,7 @@ imi.image = function(image, srcRect, dstSize)
   return imi.widgets[id].checked
 end
 
-imi.beginViewport = function(size)
+function imi.beginViewport(size)
   local id = imi.getID()
 
   local border = 4*imi.uiScale -- TODO access theme styles
@@ -669,7 +669,7 @@ imi.beginViewport = function(size)
   imi.scrollableBounds = Rectangle(imi.cursor, Size(1, 1))
 end
 
-imi.endViewport = function()
+function imi.endViewport()
   local widget = imi.viewportWidget
   local bounds = widget.bounds
   local hover = widget.hoverHBar
@@ -729,7 +729,7 @@ imi.endViewport = function()
   imi.scrollableBounds = nil
 end
 
-imi.beginDrag = function()
+function imi.beginDrag()
   if imi.widget.pressed then
     if imi.widget.dragging then
       local pt = imi.widget.bounds.origin
@@ -752,14 +752,14 @@ imi.beginDrag = function()
   end
 end
 
-imi.setDragData = function(dataType, data)
+function imi.setDragData(dataType, data)
   if imi.dragData == nil then
     imi.dragData = {}
   end
   imi.dragData[dataType] = data
 end
 
-imi.beginDrop = function()
+function imi.beginDrop()
   if imi.targetWidget and
      imi.targetWidget.id == imi.lastID then
     imi.targetWidget = nil
@@ -768,7 +768,7 @@ imi.beginDrop = function()
   return false
 end
 
-imi.getDropData = function(dataType)
+function imi.getDropData(dataType)
   if imi.dragData then
     return imi.dragData[dataType]
   else

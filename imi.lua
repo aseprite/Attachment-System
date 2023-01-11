@@ -83,12 +83,15 @@ local function initVars(ctx)
   imi.sameLine = false
   imi.breakLines = true
   imi.viewport = Rectangle(0, 0, ctx.width, ctx.height)
+  imi.viewportStack = {}
   imi.idStack = {}
   imi.layoutStack = {}
-  imi.afterOnGui = {}
+  imi.beforePaint = {}
+  imi.afterPaint = {}
   imi.lastID = nil -- Last inserted widget ID
   imi.lastBounds = nil
   imi.repaint = false
+  imi.margin = 4*imi.uiScale
 
   -- List of widget IDs inside mousePos, useful to send mouse events
   -- in order, the order in this table is from from the backmost
@@ -157,9 +160,9 @@ local function advanceCursor(size, func)
 
   if not imi.sameLine or
      (imi.breakLines and
-      imi.cursor.x > 0 and
+      imi.cursor.x > imi.viewport.x and
       imi.cursor.x + size.width > imi.viewport.x+imi.viewport.width) then
-    imi.cursor.y = imi.cursor.y + imi.rowHeight
+    imi.cursor.y = imi.cursor.y + imi.rowHeight + imi.margin
     imi.cursor.x = imi.viewport.x
     imi.rowHeight = 0
   end
@@ -185,7 +188,7 @@ local function advanceCursor(size, func)
     -- Update last bounds only when a custom alignment function is not
     -- used
     imi.lastBounds = bounds
-    imi.cursor.x = imi.cursor.x + size.width
+    imi.cursor.x = imi.cursor.x + size.width + imi.margin
   end
 end
 
@@ -195,8 +198,12 @@ local function addDrawListFunction(callback)
       callback=callback })
 end
 
-local function addAfterOnGui(callback)
-  table.insert(imi.afterOnGui, callback)
+local function addBeforePaint(callback)
+  table.insert(imi.beforePaint, callback)
+end
+
+local function addAfterPaint(callback)
+  table.insert(imi.afterPaint, callback)
 end
 
 local function pointInsideWidgetHierarchy(widget, pos)
@@ -297,10 +304,10 @@ function imi.onpaint(ev)
       end
     end
 
-    for _,f in ipairs(imi.afterOnGui) do
+    for _,f in ipairs(imi.beforePaint) do
       f()
     end
-    imi.afterOnGui = {}
+    imi.beforePaint = {}
 
     if imi.canvasId then
       imi.dlg:modify{ id=imi.canvasId, mouseCursor=imi.mouseCursor }
@@ -309,22 +316,30 @@ function imi.onpaint(ev)
     if imi.repaint then
       -- Discard the whole drawList as we're going to repaint
       imi.drawList = {}
+    else
+      -- Process the drawList
+      for i,cmd in ipairs(imi.drawList) do
+        if cmd.type == "callback" then
+          cmd.callback(ctx)
+        elseif cmd.type == "save" then
+          ctx:save()
+        elseif cmd.type == "restore" then
+          ctx:restore()
+        elseif cmd.type == "clip" then
+          ctx:rect(cmd.bounds)
+          ctx:clip()
+        end
+      end
+      imi.drawList = {}
+      if not imi.repaint then
+        for _,f in ipairs(imi.afterPaint) do
+          f()
+        end
+        imi.afterPaint = {}
+        break
+      end
     end
   end
-
-  for i,cmd in ipairs(imi.drawList) do
-    if cmd.type == "callback" then
-      cmd.callback(ctx)
-    elseif cmd.type == "save" then
-      ctx:save()
-    elseif cmd.type == "restore" then
-      ctx:restore()
-    elseif cmd.type == "clip" then
-      ctx:rect(cmd.bounds)
-      ctx:clip()
-    end
-  end
-  imi.drawList = {}
 end
 
 function imi.onmousemove(ev)
@@ -335,7 +350,7 @@ function imi.onmousemove(ev)
   for id,widget in pairs(imi.widgets) do
     if widget.bounds then
       if widget.onmousemove then
-        widget.onmousemove()
+        widget.onmousemove(widget)
       end
       if widget.dragging then
         imi.repaint = true
@@ -365,7 +380,7 @@ function imi.onmousedown(ev)
 
   for _,widget in ipairs(imi.mouseWidgets) do
     if widget.onmousedown then
-      widget.onmousedown()
+      widget.onmousedown(widget)
     end
     if ev.button == MouseButton.LEFT then
       if widget.hover then
@@ -389,7 +404,7 @@ function imi.onmouseup(ev)
   if imi.capturedWidget then
     local widget = imi.capturedWidget
     if widget.onmouseup then
-      widget.onmouseup()
+      widget.onmouseup(widget)
     end
     if widget.pressed then
       if widget.dragging then
@@ -461,30 +476,42 @@ function imi._toggle(id, text)
     size,
     function(bounds)
       updateWidget(id, { bounds=bounds })
-      addDrawListFunction(
-        function(ctx)
-          local widget = imi.widgets[id]
-          local partId
-          local color
-          if widget.pressed or
-             widget.checked then
-            partId = 'buttonset_item_pushed'
-            color = app.theme.color.button_selected_text
-          elseif widget.hover then
-            partId = 'buttonset_item_hot'
-            color = app.theme.color.button_hot_text
-          else
-            partId = 'buttonset_item_normal'
-            color = app.theme.color.button_normal_text
-          end
-          ctx:drawThemeRect(partId, bounds)
-          ctx.color = color
-          ctx:fillText(text,
-                       bounds.x+(bounds.width-textSize.width)/2,
-                       bounds.y+(bounds.height-textSize.height)/2)
-        end)
-  end)
-  return imi.widgets[id].checked
+
+      local draggingProcessed = false
+
+      function drawWidget(ctx)
+        local widget = imi.widgets[id]
+
+        if widget.dragging and not draggingProcessed then
+          draggingProcessed = true
+          -- Send this same widget to the end to draw it in the
+          -- dragged position (and without clipping)
+          addDrawListFunction(drawWidget)
+        end
+
+        local partId
+        local color
+        if widget.pressed or
+          widget.checked then
+          partId = 'buttonset_item_pushed'
+          color = app.theme.color.button_selected_text
+        elseif widget.hover then
+          partId = 'buttonset_item_hot'
+          color = app.theme.color.button_hot_text
+        else
+          partId = 'buttonset_item_normal'
+          color = app.theme.color.button_normal_text
+        end
+        ctx:drawThemeRect(partId, bounds)
+        ctx.color = color
+        ctx:fillText(text,
+                     bounds.x+(bounds.width-textSize.width)/2,
+                     bounds.y+(bounds.height-textSize.height)/2)
+      end
+
+      addDrawListFunction(drawWidget)
+    end)
+  return imi.widget.checked
 end
 
 function imi.toggle(text)
@@ -504,7 +531,7 @@ end
 function imi.radio(text, t, thisValue)
   local id = imi.getID()
 
-  addAfterOnGui(
+  addBeforePaint(
     function()
       -- Uncheck radio buttons in previous positions
       if t.value ~= thisValue then
@@ -522,7 +549,7 @@ function imi.radio(text, t, thisValue)
     if imi.widget.pressed then
       -- Uncheck radio buttons in following! positions
       t.uncheckFollowing = true
-      addAfterOnGui(
+      addBeforePaint(
         function()
           t.uncheckFollowing = nil
         end)
@@ -544,12 +571,11 @@ function imi.image(image, srcRect, dstSize)
       if insideViewport(bounds) then
         local draggingProcessed = false
 
-        local function drawWidget()
-          local ctx = imi.ctx
+        local function drawWidget(ctx)
           local widget = imi.widgets[id]
+          local bounds = widget.bounds
 
-          if widget.dragging and
-             not draggingProcessed then
+          if widget.dragging and not draggingProcessed then
             draggingProcessed = true
             -- Send this same widget to the end to draw it in the
             -- dragged position (and without clipping)
@@ -570,7 +596,7 @@ function imi.image(image, srcRect, dstSize)
         addDrawListFunction(drawWidget)
       end
     end)
-  return imi.widgets[id].checked
+  return imi.widget.checked
 end
 
 function imi.beginViewport(size)
@@ -580,7 +606,7 @@ function imi.beginViewport(size)
   local barSize = app.theme.dimension.mini_scrollbar_size
   size.height = size.height + 2*border + barSize
 
-  local function onmousemove()
+  local function onmousemove(widget)
     local widget = imi.widgets[id]
     local bounds = widget.bounds
 
@@ -612,8 +638,7 @@ function imi.beginViewport(size)
     end
   end
 
-  local function onmousedown()
-    local widget = imi.widgets[id]
+  local function onmousedown(widget)
     if widget.hoverHBar or
        imi.mouseButton == MouseButton.MIDDLE then
       widget.draggingHBar = true
@@ -624,8 +649,7 @@ function imi.beginViewport(size)
     end
   end
 
-  local function onmouseup()
-    local widget = imi.widgets[id]
+  local function onmouseup(widget)
     if widget.draggingHBar then
       widget.draggingHBar = false
     end
@@ -651,6 +675,8 @@ function imi.beginViewport(size)
       end
 
       imi.viewportWidget = widget
+
+      table.insert(imi.viewportStack, imi.viewport)
       imi.viewport = Rectangle(bounds.x+border, bounds.y+border,
                                bounds.width-2*border, bounds.height-2*border-barSize)
     end)
@@ -672,7 +698,9 @@ function imi.endViewport()
   local bounds = widget.bounds
   local hover = widget.hoverHBar
   local subDrawList = imi.drawList
-  imi.viewport = Rectangle(0, 0, imi.ctx.width, imi.ctx.height)
+
+  imi.viewport = imi.viewportStack[#imi.viewportStack]
+  table.remove(imi.viewportStack)
 
   local pop = imi.layoutStack[#imi.layoutStack]
 
@@ -734,7 +762,7 @@ function imi.beginDrag()
       local delta = imi.mousePos - dragStartMousePos
       pt = pt + (imi.mousePos - dragStartMousePos)
       if imi.widget.bounds.origin ~= pt then
-        local id = imi.lastID
+        local id = imi.widget.id
         addDrawListFunction(
           function()
             imi.widgets[id].bounds.origin = pt
@@ -772,6 +800,10 @@ function imi.getDropData(dataType)
   else
     return nil
   end
+end
+
+function imi.afterGui(func)
+  table.insert(imi.afterPaint, func)
 end
 
 return imi

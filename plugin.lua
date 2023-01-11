@@ -6,22 +6,23 @@
 ----------------------------------------------------------------------
 -- Extension Properties:
 --
+-- Sprite = {
+--   version = 1
+-- }
+--
+-- Tileset = {             -- A tileset represents a category for one layer
+--   id = categoryID       -- Tileset/category ID, referenced by layers that can use this category/tileset
+-- }
+--
 -- Layer = {
---   categories={
---     { id=0,
---       name="Default",
---       folders={
---         { name="Folder Name"
---           items={ tileIndex1, tileIndex2, ... }
---         }
---       },
---     },
---     ...
+--   categories={ categoryID1, categoryID2, etc. },
+--   folders={
+--     { name="Folder Name"
+--       items={ tileIndex1, tileIndex2, ... } }
 --   },
 -- }
 --
 -- Tile = {
---   category=nil or categoryID,
 --   pivot=Point(0, 0),
 -- }
 ----------------------------------------------------------------------
@@ -34,7 +35,7 @@ local PK = "aseprite/Attachment-System"
 
 -- The main window/dialog
 local dlg
-local title = "Attachment Window"
+local title = "Attachment System"
 local observedSprite
 local activeLayer
 local shrunkenBounds = {} -- Minimal bounds between all tiles of the active layer
@@ -44,12 +45,14 @@ local showTilesID = false
 local showTilesUsage = false
 local zoom = 1.0
 
--- Default category visible for each layer (key=layer.id, value=index of the category)
-local defaultVisibleCategory = {}
-
--- Indicate if we should show all tiles (value=0) or only the ones
--- from a specific category
-local showCategoryRadio = { value=1 }
+local function contains(t, item)
+  for _,v in pairs(t) do
+    if v == item then
+      return true
+    end
+  end
+  return false
+end
 
 local function calculate_shrunken_bounds(tilemapLayer)
   assert(tilemapLayer.isTilemap)
@@ -76,6 +79,25 @@ local function calculate_tiles_histogram(tilemapLayer)
   return histogram
 end
 
+local function calculate_new_category_id(spr)
+  local maxId = 0
+  for _,tileset in ipairs(spr.tilesets) do
+    if tileset.properties(PK).id then
+      maxId = math.max(maxId, tileset.properties(PK).id)
+      end
+  end
+  return maxId+1
+end
+
+local function find_tileset_by_categoryID(spr, categoryID)
+  for _,tileset in ipairs(spr.tilesets) do
+    if tileset.properties(PK).id == categoryID then
+      return tileset
+    end
+  end
+  return nil
+end
+
 local function get_active_tile_image()
   if activeLayer and activeLayer.isTilemap then
     local cel = activeLayer:cel(app.activeFrame)
@@ -87,43 +109,36 @@ local function get_active_tile_image()
   return nil
 end
 
+local function create_base_folder_set(layer)
+  local items = {}
+  for i=1,#layer.tileset-1 do
+    table.insert(items, i)
+  end
+  return { name="Base Set", items=items }
+end
+
+-- These properties should be set in setup_layers()/setup_sprite(),
+-- but we can set them here just in case. Anyway if the setup
+-- functions don't fully setup the properties, we'll generate
+-- undo/redo information just showing the layer in the Attachment
+-- System window
 local function get_layer_properties(layer)
   local properties = layer.properties(PK)
   if not properties.categories then
-    -- Don't modify properties.categories = { ... } do avoid creating
-    -- an undoable transaction here, here we just return a table.
-    properties = {
-      categories={
-        { id=0, name="Default", folders={ } }
-      }
-    }
+    properties.categories = {}
+  end
+  local id = layer.tileset.properties(PK).id
+  if not id then
+    id = calculate_new_category_id(layer.sprite)
+    layer.tileset.properties(PK).id = id
+  end
+  if not contains(properties.categories, id) then
+    table.insert(properties.categories, id)
+  end
+  if not properties.folders or #properties.folders == 0 then
+    properties.folders = { create_base_folder_set(layer) }
   end
   return properties
-end
-
--- TODO replace this with built-in tile properties
-local tile_properties = {}
-local function get_tile_properties(tile)
-  if not tile_properties[tile] then
-    tile_properties[tile] = { hasProperties=true }
-  end
-  return tile_properties[tile]
-end
-
-local function calculate_new_category_id(layers)
-  local maxId = 0
-  if layers == nil then
-    layers = app.activeSprite.layers
-  end
-  for _,layer in ipairs(layers) do
-    for _,category in ipairs(get_layer_properties(layer).categories) do
-      maxId = math.max(maxId, category.id)
-    end
-    if layer.layers then
-      maxId = math.max(maxId, calculate_new_category_id(layer.layers))
-    end
-  end
-  return maxId
 end
 
 local function set_active_tile(ti)
@@ -151,21 +166,45 @@ local function set_active_tile(ti)
   end
 end
 
-local function create_tile_view(index, ti, ts, inRc, outSize,
-                                activeCategory)
+local function setup_layers(layers)
+  for _,layer in ipairs(layers) do
+    if layer.isTilemap then
+      local id = layer.tileset.properties(PK).id
+      local categories = layer.properties(PK).categories
+      local folders = layer.properties(PK).folders
+
+      if not categories then
+        categories = { }
+      end
+      if not contains(categories, id) then
+        table.insert(categories, id)
+        layer.properties(PK).categories = categories
+      end
+
+      if not folders or #folders == 0 then
+        layer.properties(PK).folders = { create_base_folder_set(layer) }
+      end
+    end
+    if layer.isGroup then
+      setup_layers(layer.layers)
+    end
+  end
+end
+
+local function setup_sprite(spr)
+  -- Setup the sprite DB
+  spr.properties(PK).version = 1
+  for _,tileset in ipairs(spr.tilesets) do
+    tileset.properties(PK).id = calculate_new_category_id(spr)
+  end
+  setup_layers(spr.layers)
+end
+
+local function create_tile_view(index, ts, ti, inRc, outSize)
   imi.pushID(index)
   local tileImg = ts:getTile(ti)
   imi.image(tileImg, inRc, outSize)
-  if imi.beginDrag() then
-    imi.setDragData("tile", { index=index, ti=ti })
-  end
-  if imi.beginDrop() then
-    -- TODO reorder tiles in category
-    local data = imi.getDropData("tile")
-    if data then
-      get_tile_properties(ti).category = activeCategory.id
-    end
-  end
+  local imageWidget = imi.widget
 
   if imi.widget.checked then
     imi.widget.checked = false
@@ -174,7 +213,7 @@ local function create_tile_view(index, ti, ts, inRc, outSize,
   if showTilesID then
     imi.alignFunc = function(cursor, size, lastBounds)
       return Point(lastBounds.x,
-		   lastBounds.y+lastBounds.height-size.height)
+                   lastBounds.y+lastBounds.height-size.height)
     end
     imi.label(string.format("[%d]", ti))
     imi.widget.color = Color(255, 255, 0)
@@ -196,46 +235,127 @@ local function create_tile_view(index, ti, ts, inRc, outSize,
   end
 
   imi.popID()
+
+  imi.widget = imageWidget
+  imi.lastID = imi.widget.id
 end
 
 local function new_category_dialog()
-  local d =
-    Dialog("New Category Name")
+  local popup =
+    Dialog{ title="New Category Name", parent=imi.dlg }
     :entry{ id="name", label="Name:", focus=true }
     :button{ id="ok", text="OK", focus=true }
     :button{ id="cancel", text="Cancel" }
-  dlg:repaint()
-  d:show()
-  local data = d.data
+  popup:show()
+  local data = popup.data
   if data.ok and data.name ~= "" then
-    return {
-      id=calculate_new_category_id()+1,
-      name=data.name,
-      folders={ },
-    }
-  else
-    return nil
+    -- TODO check that the name doesn't exist
+    local spr = activeLayer.sprite
+    local id = calculate_new_category_id(spr)
+    app.transaction(function()
+        local cloned = spr:newTileset(activeLayer.tileset)
+        cloned.properties(PK).id = id
+        cloned.name = data.name
+
+        local categories = activeLayer.properties(PK).categories
+        if not categories then categories = {} end
+        table.insert(categories, id)
+        activeLayer.properties(PK).categories = categories
+        activeLayer.tileset = cloned
+        app.refresh()
+    end)
   end
 end
 
+local function show_categories_selector(categories, activeTileset)
+  local spr = app.activeSprite
+  local popup = Dialog{ title="Categories", parent=imi.dlg }
+  if categories and #categories > 0 then
+    for i,categoryID in ipairs(categories) do
+      local catTileset = find_tileset_by_categoryID(spr, categoryID)
+      if catTileset == nil then assert(false) end
+
+      local checked = (categoryID == activeTileset.properties(PK).id)
+      local name = catTileset.name
+      if name == "" then name = "Base Category" end
+      popup:button{ text=name, focus=checked,
+                    onclick=function()
+                      popup:close()
+                      activeLayer.tileset = find_tileset_by_categoryID(spr, categoryID)
+                      app.refresh()
+                    end }:newrow()
+    end
+    popup:separator()
+  end
+  popup:button{ text="New Category",
+                onclick=function()
+                  popup:close()
+                  new_category_dialog()
+                  imi.repaint = true
+                end }
+  popup:show()
+end
+
 local function new_folder_dialog()
-  local d =
-    Dialog("New Folder Name")
+  local popup =
+    Dialog{ title="New Folder Name", parent=dlg }
     :entry{ id="name", label="Name:", focus=true }
     :button{ id="ok", text="OK", focus=true }
     :button{ id="cancel", text="Cancel" }
-  dlg:repaint()
-  d:show()
-  local data = d.data
+  popup:show()
+  local data = popup.data
   if data.ok and data.name ~= "" then
     return {
       name=data.name,
       items={ },
-      folders={ },
     }
   else
     return nil
   end
+end
+
+local function show_folders_selector(folders)
+  local popup = Dialog{ title="Folders", parent=imi.dlg }
+  if folders and #folders > 0 then
+    for i,folder in ipairs(folders) do
+      local name = folder.name
+      if name == "" then name = "Base Folder" end
+      popup:entry{ id=tostring(i), text=name }:newrow()
+    end
+    popup:button{ id="rename", text="Rename Folders", focus=true }
+  end
+  popup:show()
+
+  local data = popup.data
+  if data.rename then
+    local somethingRenamed = false
+    for i,folder in ipairs(folders) do
+      if folder.name ~= data[tostring(i)] then
+        folder.name = data[tostring(i)]
+        somethingRenamed = true
+      end
+    end
+    if somethingRenamed then
+      for i=#folders,1,-1 do
+        if folders[i].name == "" then
+          table.remove(folders, i)
+        end
+      end
+      activeLayer.properties(PK).folders = folders
+    end
+    imi.repaint = true
+  end
+end
+
+local function show_options(rc)
+  local popup = Dialog{ title="Options", parent=imi.dlg }
+  popup:check{ text="Show Usage", onclick=function() showTilesUsage = not showTilesUsage end,
+               selected=showTilesUsage }:newrow()
+  popup:check{ text="Show tile ID/Index", onclick=function() showTilesID = not showTilesID end,
+               selected=showTilesID }
+  popup:button{ text="OK", focus=true }
+  popup:show()
+  imi.repaint = true
 end
 
 local function imi_ongui()
@@ -245,11 +365,19 @@ local function imi_ongui()
 
     imi.ctx.color = app.theme.color.text
     imi.label("No sprite")
+  elseif not spr.properties(PK).version or
+         spr.properties(PK).version < 1 then
+    imi.sameLine = true
+    if imi.button("Setup Sprite") then
+      app.transaction(function() setup_sprite(spr) end)
+      imi.repaint = true
+    end
   else
     dlg:modify{ title=title .. " - " .. app.fs.fileTitle(spr.filename) }
     if activeLayer then
       local layerProperties = get_layer_properties(activeLayer)
       local categories = layerProperties.categories
+      local folders = layerProperties.folders
 
       local inRc = shrunkenBounds
       local outSize = Size(128, 128)
@@ -264,36 +392,48 @@ local function imi_ongui()
       outSize.width = outSize.width * zoom
       outSize.height = outSize.height * zoom
 
-      -- Categories
-
+      -- Active Category / Categories
       imi.sameLine = true
-      local activeCategory = nil
-      for i,category in ipairs(categories) do
-        imi.pushID(i)
-        if imi.radio(category.name, showCategoryRadio, i) then
-          activeCategory = category
-        end
-        imi.popID()
+      local activeTileset = activeLayer.tileset
+      local activeCategory = activeTileset.name
+      if activeCategory == "" then
+        activeCategory = "Base Category"
+      end
+      if imi.button(activeCategory) then
+        -- Show popup to select other category
+        imi.afterGui(
+          function()
+            show_categories_selector(categories, activeTileset)
+          end)
       end
 
-      if defaultVisibleCategory[activeLayer.id] ~= showCategoryRadio.value then
-        defaultVisibleCategory[activeLayer.id] = showCategoryRadio.value
+      imi.margin = 0
+      if imi.button("Folders") then
+        imi.afterGui(
+          function()
+            show_folders_selector(folders)
+          end)
+      end
+      imi.margin = 4*imi.uiScale
+      if imi.button("+") then
+        imi.afterGui(
+          function()
+            local folder = new_folder_dialog()
+            if folder then
+              table.insert(folders, folder)
+              activeLayer.properties(PK).folders = folders
+            end
+            imi.repaint = true
+          end)
       end
 
-      imi.space(4)
-      if imi.button("New Category") then
-        local category = new_category_dialog()
-        if category then
-          table.insert(categories, category)
-          activeLayer.properties(PK).categories = categories
-        end
-        imi.repaint = true
-        return
+      imi.space(2*imi.uiScale)
+      if imi.button("Options") then
+        imi.afterGui(
+          function()
+            show_options()
+          end)
       end
-
-      imi.space(4)
-      showTilesID = imi.toggle("Show ID")
-      showTilesUsage = imi.toggle("Show Usage")
 
       imi.sameLine = false
 
@@ -306,6 +446,7 @@ local function imi_ongui()
         ti = cel.image:getPixel(0, 0)
       end
       do
+        local oldCursorY = imi.cursor.y
         local tileImg = ts:getTile(ti)
         -- Show active tile in active cel
         imi.image(tileImg, inRc, outSize)
@@ -319,103 +460,76 @@ local function imi_ongui()
             set_active_tile(data.ti)
           end
         end
-
-        imi.sameLine = true
-       end
-
-      -- List of tiles in current category
-
-      imi.beginViewport(Size(imi.ctx.width - imi.cursor.x,
-                             outSize.height))
-      if imi.beginDrop() then
-        local data = imi.getDropData("tile")
-        if data then
-          -- TODO reorder tiles in category
-          get_tile_properties(data.ti).category = activeCategory.id
-        end
       end
-
-      imi.sameLine = true
-      imi.breakLines = false
-      for i=1,#ts do
-        if (activeCategory and
-            activeCategory.id == 0 or
-            get_tile_properties(i).category == activeCategory.id) then
-          create_tile_view(i, i, ts, inRc, outSize, activeCategory)
-        end
-      end
-      imi.endViewport()
 
       -- Folders
 
-      imi.sameLine = false
-      if imi.button("New Folder") then
-        local folder = new_folder_dialog()
-        if folder then
-          table.insert(activeCategory.folders, folder)
-          activeLayer.properties(PK).categories = categories
-        end
-        imi.repaint = true
-        return
-      end
+      imi.rowHeight = 0
+      imi.viewport = Rectangle(imi.cursor.x, imi.cursor.y,
+                               imi.viewport.width - imi.cursor.x,
+                               imi.viewport.height - imi.cursor.y)
 
-      if activeCategory then
-        for i,folder in ipairs(activeCategory.folders) do
-          imi.pushID(i)
-          imi.sameLine = false
-          if imi.toggle(folder.name) then
-            -- One viewport for each opened folder
-            local outSize2 = Size(outSize.width*3/4, outSize.height*3/4)
-            imi.beginViewport(Size(imi.ctx.width,
-                                   outSize2.height))
+      for i,folder in ipairs(folders) do
+        imi.pushID(i .. folder.name)
+        imi.sameLine = false
+        imi.breakLines = true
 
-            if imi.beginDrop() then
+        local openFolder = imi.toggle(folder.name)
+
+
+        if openFolder then
+          -- One viewport for each opened folder
+          local outSize2 = Size(outSize.width*3/4, outSize.height*3/4)
+          imi.beginViewport(Size(imi.viewport.width,
+                                 outSize2.height))
+
+          if imi.beginDrop() then
+            local data = imi.getDropData("tile")
+            if data then
+              -- Drag-and-drop in the same folder, move the tile to the end
+              if data.folder == folder.name then
+                table.remove(folder.items, data.index)
+              end
+              -- Drop a new item at the end of this folder
+              table.insert(folder.items, data.ti)
+              activeLayer.properties(PK).folders = folders
+              imi.repaint = true
+            end
+          end
+
+          imi.sameLine = true
+          imi.breakLines = false
+          imi.margin = 0
+          for index,ti in ipairs(folder.items) do
+            imi.pushID(index)
+            create_tile_view(index, activeLayer.tileset, ti, inRc, outSize2)
+
+            if imi.beginDrag() then
+              imi.setDragData("tile", { index=index, ti=ti, folder=folder.name })
+            elseif imi.beginDrop() then
               local data = imi.getDropData("tile")
               if data then
-                -- Drag-and-drop in the same folder, move the tile to the end
+                -- Drag-and-drop in the same folder
                 if data.folder == folder.name then
                   table.remove(folder.items, data.index)
+                  table.insert(folder.items, index, data.ti)
+                else
+                  -- Drag-and-drop between folders drops a new item
+                  -- in the "index" position of this folder
+                  table.insert(folder.items, index, data.ti)
                 end
-                -- Drop a new item at the end of this folder
-                table.insert(folder.items, data.ti)
-                activeLayer.properties(PK).categories = categories
+                activeLayer.properties(PK).folders = folders
                 imi.repaint = true
               end
             end
 
-            imi.sameLine = true
-            imi.breakLines = false
-            for index,ti in ipairs(folder.items) do
-              imi.pushID(index)
-              local tileImg = ts:getTile(ti)
-              imi.image(tileImg, inRc, outSize2)
-
-              if imi.beginDrag() then
-                imi.setDragData("tile", { index=index, ti=ti, folder=folder.name })
-              elseif imi.beginDrop() then
-                local data = imi.getDropData("tile")
-                if data then
-                  -- Drag-and-drop in the same folder
-                  if data.folder == folder.name then
-                    table.remove(folder.items, data.index)
-                    table.insert(folder.items, index, data.ti)
-                  else
-                    -- Drag-and-drop between folders drops a new item
-                    -- in the "index" position of this folder
-                    table.insert(folder.items, index, data.ti)
-                  end
-                  activeLayer.properties(PK).categories = categories
-                  imi.repaint = true
-                end
-              end
-
-              imi.widget.checked = false
-              imi.popID()
-            end
-            imi.endViewport()
+            imi.widget.checked = false
+            imi.popID()
           end
-          imi.popID()
+          imi.endViewport()
+          imi.margin = 4*imi.uiScale
         end
+        imi.popID()
       end
     end
   end
@@ -483,27 +597,36 @@ local function canvas_ontouchmagnify(ev)
   dlg:repaint()
 end
 
+-- TODO this can be called from a background thread when we apply an
+--      filter/effect to the tiles (called from Aseprite function
+--      remove_unused_tiles_from_tileset())
 local function Sprite_remaptileset(ev)
   -- If the action came from an undo/redo, the properties are restored
   -- automatically to the old/new value, we don't have to readjust
   -- them.
   if not ev.fromUndo and activeLayer then
+    local spr = activeLayer.sprite
     local layerProperties = get_layer_properties(activeLayer)
     local categories = layerProperties.categories
 
-    for _,category in ipairs(categories) do
-      for _,folder in ipairs(category.folders) do
-        local newItems = {}
-        for k=1,#folder.items do
-          newItems[k] = ev.remap[folder.items[k]]
-        end
-        folder.items = newItems
+    -- Remap all categories
+    for _,categoryID in ipairs(categories) do
+      local tileset = find_tileset_by_categoryID(spr, categoryID)
+      -- TODO
+    end
+
+    -- Remap items in folders
+    for _,folder in ipairs(layerProperties.folders) do
+      local newItems = {}
+      for k=1,#folder.items do
+        newItems[k] = ev.remap[folder.items[k]]
       end
+      folder.items = newItems
     end
 
     -- This generates the undo information for first time in the
     -- current transaction (within the Remap command)
-    activeLayer.properties(PK).categories = categories
+    activeLayer.properties(PK).folders = folders
     dlg:repaint()
   end
 end
@@ -540,14 +663,6 @@ local function App_sitechange(ev)
   if activeLayer ~= lay then
     activeLayer = lay
     if activeLayer and activeLayer.isTilemap then
-      do
-        local index = defaultVisibleCategory[activeLayer.id]
-        if index == nil then
-          index = 1
-        end
-        showCategoryRadio = { value=index }
-      end
-
       shrunkenBounds = calculate_shrunken_bounds(activeLayer)
       tilesHistogram = calculate_tiles_histogram(activeLayer)
     else
@@ -610,4 +725,12 @@ function init(plugin)
     group="view_new",
     onclick=AttachmentWindow_SwitchWindow
   }
+
+  showTilesID = plugin.preferences.showTilesID
+  showTilesUsage = plugin.preferences.showTilesUsage
+end
+
+function exit(plugin)
+  plugin.preferences.showTilesID = showTilesID
+  plugin.preferences.showTilesUsage = showTilesUsage
 end

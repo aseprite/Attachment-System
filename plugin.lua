@@ -373,9 +373,7 @@ local function create_tile_view(folders, folder, index, ts, ti, inRc, outSize)
   end
 
   imi.popID()
-
   imi.widget = imageWidget
-  imi.lastID = imi.widget.id
 end
 
 local function new_category_dialog()

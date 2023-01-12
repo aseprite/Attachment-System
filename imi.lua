@@ -84,7 +84,6 @@ local function initVars(ctx)
   imi.layoutStack = {}
   imi.beforePaint = {}
   imi.afterPaint = {}
-  imi.lastID = nil -- Last inserted widget ID
   imi.lastBounds = nil
   imi.repaint = false
   imi.margin = 4*imi.uiScale
@@ -439,7 +438,6 @@ function imi.getID()
   for i=1,#imi.idStack do
     id = id .. "," .. imi.idStack[i]
   end
-  imi.lastID = id
   return id
 end
 
@@ -788,7 +786,7 @@ end
 
 function imi.beginDrop()
   if imi.targetWidget and
-     imi.targetWidget.id == imi.lastID then
+     imi.targetWidget.id == imi.widget.id then
     imi.targetWidget = nil
     return true
   end

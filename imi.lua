@@ -68,10 +68,6 @@ local WidgetFlags = {
   DRAGGING = 32,
 }
 
-local function clamp(value, min, max)
-  return math.max(min, math.min(value, max))
-end
-
 -- Reset these variables before calling ongui()
 local function initVars(ctx)
   imi.ctx = ctx
@@ -258,9 +254,9 @@ local function getScrollInfo(widget)
     pos = 0
   elseif widget.scrollableSize.width > 0 then
     len = fullLen * widget.viewportSize.width / widget.scrollableSize.width
-    len = clamp(len, app.theme.dimension.scrollbar_size, fullLen)
+    len = imi.clamp(len, app.theme.dimension.scrollbar_size, fullLen)
     pos = (fullLen-len) * pos / (widget.scrollableSize.width-widget.viewportSize.width)
-    pos = clamp(pos, 0, fullLen-len)
+    pos = imi.clamp(pos, 0, fullLen-len)
   else
     len = 0
     pos = 0
@@ -277,6 +273,11 @@ end
 ----------------------------------------------------------------------
 -- Public API
 ----------------------------------------------------------------------
+
+function imi.clamp(value, min, max)
+  if value == nil then value = min end
+  return math.max(min, math.min(value, max))
+end
 
 function imi.init(values)
   imi.dlg = values.dialog
@@ -617,13 +618,13 @@ function imi.beginViewport(size)
         local info = getScrollInfo(widget)
         local pos = dragStartScrollBarPos + (imi.mousePos - dragStartMousePos)
         pos.y = 0
-        pos.x = clamp(pos.x, 0, info.fullLen - info.len)
+        pos.x = imi.clamp(pos.x, 0, info.fullLen - info.len)
         widget.scrollPos.x = maxScrollPos.width * pos.x / (info.fullLen - info.len)
       else
         widget.scrollPos = dragStartScrollPos + (dragStartMousePos - imi.mousePos)
       end
       widget.scrollPos.y = 0
-      widget.scrollPos.x = clamp(widget.scrollPos.x, 0, maxScrollPos.width)
+      widget.scrollPos.x = imi.clamp(widget.scrollPos.x, 0, maxScrollPos.width)
       imi.dlg:repaint()
 
       imi.mouseCursor = MouseCursor.GRABBING

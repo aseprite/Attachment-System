@@ -54,6 +54,10 @@ local function contains(t, item)
   return false
 end
 
+local function set_zoom(z)
+  zoom = imi.clamp(z, 0.5, 10.0)
+end
+
 local function calculate_shrunken_bounds(tilemapLayer)
   assert(tilemapLayer.isTilemap)
   local bounds = Rectangle()
@@ -708,11 +712,10 @@ end
 local function canvas_onwheel(ev)
   if ev.ctrlKey then
     if ev.shiftKey then
-      zoom = zoom - ev.deltaY/2.0
+      set_zoom(zoom - ev.deltaY/2.0)
     else
-      zoom = zoom - ev.deltaY/32.0
+      set_zoom(zoom - ev.deltaY/32.0)
     end
-    if zoom < 0.5 then zoom = 0.5 end
     dlg:repaint()
   else
     if #imi.mouseWidgets > 0 then
@@ -735,8 +738,7 @@ local function canvas_onwheel(ev)
 end
 
 local function canvas_ontouchmagnify(ev)
-  zoom = zoom + zoom*ev.magnification
-  if zoom < 0.5 then zoom = 0.5 end
+  set_zoom(zoom + zoom*ev.magnification)
   dlg:repaint()
 end
 
@@ -871,9 +873,11 @@ function init(plugin)
 
   showTilesID = plugin.preferences.showTilesID
   showTilesUsage = plugin.preferences.showTilesUsage
+  set_zoom(plugin.preferences.zoom)
 end
 
 function exit(plugin)
   plugin.preferences.showTilesID = showTilesID
   plugin.preferences.showTilesUsage = showTilesUsage
+  plugin.preferences.zoom = zoom
 end

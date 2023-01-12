@@ -311,19 +311,19 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     popup:close()
   end
 
-  popup:button{ text="New Empty", onclick=newEmpty }:newrow()
+  popup:menuItem{ text="New Empty", onclick=newEmpty }:newrow()
   if #activeLayer.properties(PK).categories < 2 then
-    popup:button{ text="Duplicate", onclick=duplicateFromThis }:newrow()
+    popup:menuItem{ text="Duplicate", onclick=duplicateFromThis }:newrow()
   else
-    popup:button{ text="Duplicate From This Category", onclick=duplicateFromThis }:newrow()
-    popup:button{ text="Duplicate On Each Category", onclick=duplicateOnEachCategory }:newrow()
+    popup:menuItem{ text="Duplicate From This Category", onclick=duplicateFromThis }:newrow()
+    popup:menuItem{ text="Duplicate On Each Category", onclick=duplicateOnEachCategory }:newrow()
   end
-  popup:button{ text="Delete", onclick=delete }
+  popup:menuItem{ text="Delete", onclick=delete }
   if folder then
     popup:separator()
-    popup:button{ text="Remove From Folder", onclick=removeFromFolder }
+    popup:menuItem{ text="Remove From Folder", onclick=removeFromFolder }
   end
-  popup:show()
+  popup:showMenu()
   imi.repaint = true
 end
 
@@ -403,7 +403,7 @@ end
 
 local function show_categories_selector(categories, activeTileset)
   local spr = app.activeSprite
-  local popup = Dialog{ title="Categories", parent=imi.dlg }
+  local popup = Dialog{ parent=imi.dlg }
   if categories and #categories > 0 then
     for i,categoryID in ipairs(categories) do
       local catTileset = find_tileset_by_categoryID(spr, categoryID)
@@ -412,22 +412,22 @@ local function show_categories_selector(categories, activeTileset)
       local checked = (categoryID == activeTileset.properties(PK).id)
       local name = catTileset.name
       if name == "" then name = "Base Category" end
-      popup:button{ text=name, focus=checked,
-                    onclick=function()
-                      popup:close()
-                      activeLayer.tileset = find_tileset_by_categoryID(spr, categoryID)
-                      app.refresh()
-                    end }:newrow()
+      popup:menuItem{ text=name, focus=checked,
+                      onclick=function()
+                        popup:close()
+                        activeLayer.tileset = find_tileset_by_categoryID(spr, categoryID)
+                        app.refresh()
+                      end }:newrow()
     end
     popup:separator()
   end
-  popup:button{ text="New Category",
-                onclick=function()
-                  popup:close()
-                  new_category_dialog()
-                  imi.repaint = true
-                end }
-  popup:show()
+  popup:menuItem{ text="New Category",
+                  onclick=function()
+                    popup:close()
+                    new_category_dialog()
+                    imi.repaint = true
+                  end }
+  popup:showMenu()
 end
 
 local function new_folder_dialog()
@@ -449,16 +449,17 @@ local function new_folder_dialog()
 end
 
 local function show_folders_selector(folders)
-  local popup = Dialog{ title="Folders", parent=imi.dlg }
+  local popup = Dialog{ parent=imi.dlg }
   if folders and #folders > 0 then
     for i,folder in ipairs(folders) do
       local name = folder.name
       if name == "" then name = "Base Folder" end
       popup:entry{ id=tostring(i), text=name }:newrow()
     end
-    popup:button{ id="rename", text="Rename Folders", focus=true }
+    popup:separator()
+    popup:menuItem{ id="rename", text="Rename Folders", focus=true }
   end
-  popup:show()
+  popup:showMenu()
 
   local data = popup.data
   if data.rename then
@@ -482,13 +483,12 @@ local function show_folders_selector(folders)
 end
 
 local function show_options(rc)
-  local popup = Dialog{ title="Options", parent=imi.dlg }
-  popup:check{ text="Show Usage", onclick=function() showTilesUsage = not showTilesUsage end,
-               selected=showTilesUsage }:newrow()
-  popup:check{ text="Show tile ID/Index", onclick=function() showTilesID = not showTilesID end,
-               selected=showTilesID }
-  popup:button{ text="OK", focus=true }
-  popup:show()
+  local popup = Dialog{ parent=imi.dlg }
+  popup:menuItem{ text="Show Usage", onclick=function() showTilesUsage = not showTilesUsage end,
+                  selected=showTilesUsage }:newrow()
+  popup:menuItem{ text="Show tile ID/Index", onclick=function() showTilesID = not showTilesID end,
+                  selected=showTilesID }
+  popup:showMenu()
   imi.repaint = true
 end
 

@@ -79,6 +79,17 @@ local function calculate_tiles_histogram(tilemapLayer)
   return histogram
 end
 
+local function remap_tiles_in_tilemap_layer_delete_index(tilemapLayer, deleteTi)
+  for _,cel in ipairs(tilemapLayer.cels) do
+    local ti = cel.image:getPixel(0, 0)
+    if ti >= deleteTi then
+      local tilemapCopy = Image(cel.image)
+      tilemapCopy:putPixel(0, 0, ti-1)
+      cel.image:drawImage(tilemapCopy)
+    end
+  end
+end
+
 local function calculate_new_category_id(spr)
   local maxId = 0
   for _,tileset in ipairs(spr.tilesets) do
@@ -200,11 +211,134 @@ local function setup_sprite(spr)
   setup_layers(spr.layers)
 end
 
-local function create_tile_view(index, ts, ti, inRc, outSize)
+local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
+  -- TODO Probably we need a new Menu() widget
+  local popup = Dialog{ title="Tile", parent=imi.dlg }
+  local spr = activeLayer.sprite
+
+  function forEachCategoryTileset(func)
+    for i,categoryID in ipairs(activeLayer.properties(PK).categories) do
+      local catTileset = find_tileset_by_categoryID(spr, categoryID)
+      func(catTileset)
+    end
+  end
+
+  function newEmpty()
+    app.transaction(
+      function()
+        local tile
+        forEachCategoryTileset(
+          function(ts)
+            local t = spr:newTile(ts)
+            if tile == nil then
+              tile = t
+            else
+              assert(t.index == t.index)
+            end
+          end)
+        if folder and tile then
+          table.insert(folder, tile.index)
+          activeLayer.properties(PK).folders = folders
+        end
+      end)
+    popup:close()
+  end
+
+  function duplicateFromThis()
+    local origTile = ts:tile(ti)
+    app.transaction(
+      function()
+        local tile
+        forEachCategoryTileset(
+          function(ts)
+            tile = spr:newTile(ts)
+            tile.image:clear()
+            tile.image:drawImage(origTile.image)
+          end)
+        if folder and tile then
+          table.insert(folder, tile.index)
+          activeLayer.properties(PK).folders = folders
+        end
+      end)
+    popup:close()
+  end
+
+  function duplicateOnEachCategory()
+    local origTile = ts:tile(ti)
+    app.transaction(
+      function()
+        local tile
+        forEachCategoryTileset(
+          function(ts)
+            tile = spr:newTile(ts)
+            tile.image:clear()
+            tile.image:drawImage(ts:tile(ti).image)
+          end)
+        if folder and tile then
+          table.insert(folder, tile.index)
+          activeLayer.properties(PK).folders = folders
+        end
+      end)
+    popup:close()
+  end
+
+  function delete()
+    app.transaction(
+      function()
+        forEachCategoryTileset(
+          function(ts)
+            spr:deleteTile(ts, ti)
+          end)
+
+        -- TODO remap tiles, should this be included in spr:deleteTile()
+        remap_tiles_in_tilemap_layer_delete_index(activeLayer, ti)
+
+        for _,folder in ipairs(folders) do
+          for i=#folder,1,-1 do
+            if folder[i] == tile.index then
+              table.remove(folder, i)
+            end
+          end
+        end
+        activeLayer.properties(PK).folders = folders
+      end)
+    popup:close()
+  end
+
+  function removeFromFolder()
+    table.remove(folder, indexInFolder)
+    activeLayer.properties(PK).folders = folders
+    popup:close()
+  end
+
+  popup:button{ text="New Empty", onclick=newEmpty }:newrow()
+  if #activeLayer.properties(PK).categories < 2 then
+    popup:button{ text="Duplicate", onclick=duplicateFromThis }:newrow()
+  else
+    popup:button{ text="Duplicate From This Category", onclick=duplicateFromThis }:newrow()
+    popup:button{ text="Duplicate On Each Category", onclick=duplicateOnEachCategory }:newrow()
+  end
+  popup:button{ text="Delete", onclick=delete }
+  if folder then
+    popup:separator()
+    popup:button{ text="Remove From Folder", onclick=removeFromFolder }
+  end
+  popup:show()
+  imi.repaint = true
+end
+
+local function create_tile_view(folders, folder, index, ts, ti, inRc, outSize)
   imi.pushID(index)
   local tileImg = ts:getTile(ti)
   imi.image(tileImg, inRc, outSize)
   local imageWidget = imi.widget
+
+  imi.widget.onmousedown = function(widget)
+    -- Context menu
+    if imi.mouseButton == MouseButton.RIGHT then
+      show_tile_context_menu(ts, ti, folders, folder, index)
+    end
+  end
 
   if imi.widget.checked then
     imi.widget.checked = false
@@ -448,8 +582,17 @@ local function imi_ongui()
       do
         local oldCursorY = imi.cursor.y
         local tileImg = ts:getTile(ti)
+
         -- Show active tile in active cel
         imi.image(tileImg, inRc, outSize)
+
+        -- Context menu for active tile
+        imi.widget.onmousedown = function(widget)
+          if imi.mouseButton == MouseButton.RIGHT then
+            show_tile_context_menu(ts, ti)
+          end
+        end
+
         if imi.beginDrag() then
           imi.setDragData("tile", { index=0, ti=ti })
         -- We can drop a tile here to change the tile in the activeCel
@@ -502,7 +645,7 @@ local function imi_ongui()
           imi.margin = 0
           for index,ti in ipairs(folder.items) do
             imi.pushID(index)
-            create_tile_view(index, activeLayer.tileset, ti, inRc, outSize2)
+            create_tile_view(folders, folder.items, index, activeLayer.tileset, ti, inRc, outSize2)
 
             if imi.beginDrag() then
               imi.setDragData("tile", { index=index, ti=ti, folder=folder.name })

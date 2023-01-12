@@ -770,6 +770,7 @@ function imi.beginDrag()
     else
       dragStartMousePos = imi.mousePos
       imi.widget.dragging = true
+      imi.capturedWidget = imi.widget
     end
     return true
   else

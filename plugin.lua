@@ -10,8 +10,8 @@
 --   version = 1
 -- }
 --
--- Tileset = {             -- A tileset represents a category for one layer
---   id = categoryID       -- Tileset/category ID, referenced by layers that can use this category/tileset
+-- Tileset = {            -- A tileset represents a category for one layer
+--   id = categoryID,     -- Tileset/category ID, referenced by layers that can use this category/tileset
 -- }
 --
 -- Layer = {
@@ -33,7 +33,9 @@ local imi = dofile('./imi.lua')
 -- E.g. layer.properties(PK)
 local PK = "aseprite/Attachment-System"
 
+-- Constants names
 local kBaseSetName = "Base Set"
+local kUnnamedCategory = "(Unnamed)"
 
 -- The main window/dialog
 local dlg
@@ -54,6 +56,15 @@ local function contains(t, item)
     end
   end
   return false
+end
+
+local function find_index(t, item)
+  for i,v in pairs(t) do
+    if v == item then
+      return i
+    end
+  end
+  return nil
 end
 
 local function set_zoom(z)
@@ -115,6 +126,15 @@ local function find_tileset_by_categoryID(spr, categoryID)
   return nil
 end
 
+local function find_tileset_by_name(spr, name)
+  for _,tileset in ipairs(spr.tilesets) do
+    if tileset.name == name then
+      return tileset
+    end
+  end
+  return nil
+end
+
 local function get_active_tile_image()
   if activeLayer and activeLayer.isTilemap then
     local cel = activeLayer:cel(app.activeFrame)
@@ -135,8 +155,7 @@ local function create_base_set_folder(layer)
 end
 
 local function is_base_set_folder(folder)
-  local result = (folder.name == kBaseSetName)
-  return result
+  return (folder.name == kBaseSetName)
 end
 
 local function get_base_set_folder(folders)
@@ -357,19 +376,36 @@ local function create_tile_view(folders, folder, index, ts, ti, inRc, outSize)
   imi.widget = imageWidget
 end
 
-local function new_category_dialog()
+local function new_or_rename_category_dialog(categoryTileset)
+  local name = ""
+  local title
+  if categoryTileset then
+    title = "Rename Category Name"
+    name = categoryTileset.name
+  else
+    title = "New Category Name"
+  end
   local popup =
-    Dialog{ title="New Category Name", parent=imi.dlg }
-    :entry{ id="name", label="Name:", focus=true }
+    Dialog{ title=title, parent=imi.dlg }
+    :entry{ id="name", label="Name:", text=name, focus=true }
     :button{ id="ok", text="OK", focus=true }
     :button{ id="cancel", text="Cancel" }
   popup:show()
   local data = popup.data
   if data.ok and data.name ~= "" then
-    -- TODO check that the name doesn't exist
-    local spr = activeLayer.sprite
-    local id = calculate_new_category_id(spr)
-    app.transaction(function()
+    if categoryTileset then
+      categoryTileset.name = data.name
+    else
+      local spr = activeLayer.sprite
+
+      -- Check that we cannot create two tilesets with the same name
+      if find_tileset_by_name(spr, data.name) then
+        return app.alert("A category named '" .. data.name .. "' already exist. " ..
+                         "You cannot have two categories with the same name")
+      end
+
+      local id = calculate_new_category_id(spr)
+      app.transaction(function()
         local cloned = spr:newTileset(activeLayer.tileset)
         cloned.properties(PK).id = id
         cloned.name = data.name
@@ -380,12 +416,38 @@ local function new_category_dialog()
         activeLayer.properties(PK).categories = categories
         activeLayer.tileset = cloned
         app.refresh()
-    end)
+      end)
+    end
   end
 end
 
 local function show_categories_selector(categories, activeTileset)
   local spr = app.activeSprite
+  local categories = activeLayer.properties(PK).categories
+
+  function rename()
+    new_or_rename_category_dialog(activeTileset)
+  end
+
+  function delete()
+    app.transaction(function()
+      if categories then
+        local catID = activeTileset.properties(PK).id
+        local catIndex = find_index(categories, catID)
+
+        -- First we set the tileset of the layer to the first category
+        activeLayer.tileset = find_tileset_by_categoryID(spr, categories[1])
+
+        -- Remove the category/tileset
+        table.remove(categories, catIndex)
+        activeLayer.properties(PK).categories = categories
+        spr:deleteTileset(activeTileset)
+
+        app.refresh()
+      end
+    end)
+  end
+
   local popup = Dialog{ parent=imi.dlg }
   if categories and #categories > 0 then
     for i,categoryID in ipairs(categories) do
@@ -394,7 +456,7 @@ local function show_categories_selector(categories, activeTileset)
 
       local checked = (categoryID == activeTileset.properties(PK).id)
       local name = catTileset.name
-      if name == "" then name = "Base Category" end
+      if name == "" then name = kUnnamedCategory end
       popup:menuItem{ text=name, focus=checked,
                       onclick=function()
                         popup:close()
@@ -407,63 +469,80 @@ local function show_categories_selector(categories, activeTileset)
   popup:menuItem{ text="New Category",
                   onclick=function()
                     popup:close()
-                    new_category_dialog()
+                    new_or_rename_category_dialog()
                     imi.repaint = true
                   end }
+  popup:menuItem{ text="Rename Category", onclick=rename }
+  if #categories > 1 then
+    popup:menuItem{ text="Delete Category", onclick=delete }
+  end
   popup:showMenu()
 end
 
-local function new_folder_dialog()
+local function new_or_rename_folder_dialog(folder)
+  local name = ""
+  local title
+  if folder then
+    title = "Rename Folder Name"
+    name = folder.name
+  else
+    title = "New Folder Name"
+  end
   local popup =
-    Dialog{ title="New Folder Name", parent=dlg }
-    :entry{ id="name", label="Name:", focus=true }
+    Dialog{ title=title, parent=dlg }
+    :entry{ id="name", label="Name:", text=name, focus=true }
     :button{ id="ok", text="OK", focus=true }
     :button{ id="cancel", text="Cancel" }
   popup:show()
   local data = popup.data
   if data.ok and data.name ~= "" then
-    return {
-      name=data.name,
-      items={ },
-    }
+    if folder then
+      folder.name = data.name
+      return folder
+    else
+      return {
+        name=data.name,
+        items={ },
+      }
+    end
   else
     return nil
   end
 end
 
-local function show_folders_selector(folders)
-  local popup = Dialog{ parent=imi.dlg }
-  if folders and #folders > 0 then
-    for i,folder in ipairs(folders) do
-      local name = folder.name
-      -- TODO should we convert empty folder name to base set (?)
-      if name == "" then name = kBaseSetName end
-      popup:entry{ id=tostring(i), text=name }:newrow()
-    end
-    popup:separator()
-    popup:menuItem{ id="rename", text="Rename Folders", focus=true }
+local function show_folder_context_menu(folders, folder)
+  local function sortByIndex()
+    table.sort(folder.items, function(a, b) return a < b end)
+    activeLayer.properties(PK).folders = folders
   end
-  popup:showMenu()
 
-  local data = popup.data
-  if data.rename then
-    local somethingRenamed = false
-    for i,folder in ipairs(folders) do
-      if folder.name ~= data[tostring(i)] then
-        folder.name = data[tostring(i)]
-        somethingRenamed = true
+  local function rename()
+    folder = new_or_rename_folder_dialog(folder)
+    activeLayer.properties(PK).folders = folders
+  end
+
+  local function delete()
+    local folderIndex = 0
+    for i,f in ipairs(folders) do
+      if f == folder then
+        folderIndex = i
+        break
       end
     end
-    if somethingRenamed then
-      for i=#folders,1,-1 do
-        if folders[i].name == "" then
-          table.remove(folders, i)
-        end
-      end
+    if folderIndex > 0 then
+      table.remove(folders, folderIndex)
       activeLayer.properties(PK).folders = folders
     end
-    imi.repaint = true
   end
+
+  local popup = Dialog{ parent=imi.dlg }
+  popup:menuItem{ text="Sort by Tile Index/ID", onclick=sortByIndex }
+  if not is_base_set_folder(folder) then
+    popup:separator()
+    popup:menuItem{ text="Rename Folder", onclick=rename }
+    popup:menuItem{ text="Delete Folder", onclick=delete }
+  end
+  popup:showMenu()
 end
 
 local function show_options(rc)
@@ -513,11 +592,9 @@ local function imi_ongui()
       -- Active Category / Categories
       imi.sameLine = true
       local activeTileset = activeLayer.tileset
-      local activeCategory = activeTileset.name
-      if activeCategory == "" then
-        activeCategory = "Base Category"
-      end
-      if imi.button(activeCategory) then
+      local name = activeTileset.name
+      if name == "" then name = kUnnamedCategory end
+      if imi.button(name) then
         -- Show popup to select other category
         imi.afterGui(
           function()
@@ -525,18 +602,10 @@ local function imi_ongui()
           end)
       end
 
-      imi.margin = 0
-      if imi.button("Folders") then
+      if imi.button("New Folder") then
         imi.afterGui(
           function()
-            show_folders_selector(folders)
-          end)
-      end
-      imi.margin = 4*imi.uiScale
-      if imi.button("+") then
-        imi.afterGui(
-          function()
-            local folder = new_folder_dialog()
+            local folder = new_or_rename_folder_dialog()
             if folder then
               table.insert(folders, folder)
               activeLayer.properties(PK).folders = folders
@@ -603,6 +672,12 @@ local function imi_ongui()
 
         local openFolder = imi.toggle(folder.name)
 
+        -- Context menu for active tile
+        imi.widget.onmousedown = function(widget)
+          if imi.mouseButton == MouseButton.RIGHT then
+            show_folder_context_menu(folders, folder)
+          end
+        end
 
         if openFolder then
           -- One viewport for each opened folder

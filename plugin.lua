@@ -17,7 +17,7 @@
 -- Layer = {
 --   categories={ categoryID1, categoryID2, etc. },
 --   folders={
---     { name="Folder Name"
+--     { name="Folder Name",
 --       items={ tileIndex1, tileIndex2, ... } }
 --   },
 -- }
@@ -33,11 +33,13 @@ local imi = dofile('./imi.lua')
 -- E.g. layer.properties(PK)
 local PK = "aseprite/Attachment-System"
 
+local kBaseSetName = "Base Set"
+
 -- The main window/dialog
 local dlg
 local title = "Attachment System"
 local observedSprite
-local activeLayer
+local activeLayer         -- Active tilemap (nil if the active layer isn't a tilemap)
 local shrunkenBounds = {} -- Minimal bounds between all tiles of the active layer
 local tilesHistogram = {} -- How many times each tile is used in the active layer
 local activeTileImageInfo = {} -- Used to re-calculate info when the tile image changes
@@ -124,12 +126,28 @@ local function get_active_tile_image()
   return nil
 end
 
-local function create_base_folder_set(layer)
+local function create_base_set_folder(layer)
   local items = {}
   for i=1,#layer.tileset-1 do
     table.insert(items, i)
   end
-  return { name="Base Set", items=items }
+  return { name=kBaseSetName, items=items }
+end
+
+local function is_base_set_folder(folder)
+  local result = (folder.name == kBaseSetName)
+  return result
+end
+
+local function get_base_set_folder(folders)
+  for _,folder in ipairs(folders) do
+    if is_base_set_folder(folder) then
+      return folder
+    end
+  end
+  folder = create_base_set_folder(activeLayer)
+  table.insert(folders, folder)
+  return folder
 end
 
 -- These properties should be set in setup_layers()/setup_sprite(),
@@ -151,7 +169,7 @@ local function get_layer_properties(layer)
     table.insert(properties.categories, id)
   end
   if not properties.folders or #properties.folders == 0 then
-    properties.folders = { create_base_folder_set(layer) }
+    properties.folders = { create_base_set_folder(layer) }
   end
   return properties
 end
@@ -197,7 +215,7 @@ local function setup_layers(layers)
       end
 
       if not folders or #folders == 0 then
-        layer.properties(PK).folders = { create_base_folder_set(layer) }
+        layer.properties(PK).folders = { create_base_set_folder(layer) }
       end
     end
     if layer.isGroup then
@@ -227,6 +245,18 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     end
   end
 
+  function addInFolderAndBaseSet(ti)
+    if folder then
+      table.insert(folder.items, ti)
+    end
+    -- Add the tile in the Base Set folder (always)
+    if not folder or not is_base_set_folder(folder) then
+      local baseSet = get_base_set_folder(folders)
+      table.insert(baseSet.items, ti)
+    end
+    activeLayer.properties(PK).folders = folders
+  end
+
   function newEmpty()
     app.transaction(
       function()
@@ -240,34 +270,15 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
               assert(t.index == t.index)
             end
           end)
-        if folder and tile then
-          table.insert(folder, tile.index)
-          activeLayer.properties(PK).folders = folders
+
+        if tile then
+          addInFolderAndBaseSet(tile.index)
         end
       end)
     popup:close()
   end
 
-  function duplicateFromThis()
-    local origTile = ts:tile(ti)
-    app.transaction(
-      function()
-        local tile
-        forEachCategoryTileset(
-          function(ts)
-            tile = spr:newTile(ts)
-            tile.image:clear()
-            tile.image:drawImage(origTile.image)
-          end)
-        if folder and tile then
-          table.insert(folder, tile.index)
-          activeLayer.properties(PK).folders = folders
-        end
-      end)
-    popup:close()
-  end
-
-  function duplicateOnEachCategory()
+  function duplicate()
     local origTile = ts:tile(ti)
     app.transaction(
       function()
@@ -277,55 +288,25 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
             tile = spr:newTile(ts)
             tile.image:clear()
             tile.image:drawImage(ts:tile(ti).image)
-          end)
-        if folder and tile then
-          table.insert(folder, tile.index)
-          activeLayer.properties(PK).folders = folders
+        end)
+        if tile then
+          addInFolderAndBaseSet(tile.index)
         end
       end)
     popup:close()
   end
 
   function delete()
-    app.transaction(
-      function()
-        forEachCategoryTileset(
-          function(ts)
-            spr:deleteTile(ts, ti)
-          end)
-
-        -- TODO remap tiles, should this be included in spr:deleteTile()
-        remap_tiles_in_tilemap_layer_delete_index(activeLayer, ti)
-
-        for _,folder in ipairs(folders) do
-          for i=#folder,1,-1 do
-            if folder[i] == tile.index then
-              table.remove(folder, i)
-            end
-          end
-        end
-        activeLayer.properties(PK).folders = folders
-      end)
-    popup:close()
-  end
-
-  function removeFromFolder()
-    table.remove(folder, indexInFolder)
+    table.remove(folder.items, indexInFolder)
     activeLayer.properties(PK).folders = folders
     popup:close()
   end
 
   popup:menuItem{ text="New Empty", onclick=newEmpty }:newrow()
-  if #activeLayer.properties(PK).categories < 2 then
-    popup:menuItem{ text="Duplicate", onclick=duplicateFromThis }:newrow()
-  else
-    popup:menuItem{ text="Duplicate From This Category", onclick=duplicateFromThis }:newrow()
-    popup:menuItem{ text="Duplicate On Each Category", onclick=duplicateOnEachCategory }:newrow()
-  end
-  popup:menuItem{ text="Delete", onclick=delete }
-  if folder then
+  popup:menuItem{ text="Duplicate", onclick=duplicate }:newrow()
+  if folder and not is_base_set_folder(folder) then
     popup:separator()
-    popup:menuItem{ text="Remove From Folder", onclick=removeFromFolder }
+    popup:menuItem{ text="Delete", onclick=delete }
   end
   popup:showMenu()
   imi.repaint = true
@@ -455,7 +436,8 @@ local function show_folders_selector(folders)
   if folders and #folders > 0 then
     for i,folder in ipairs(folders) do
       local name = folder.name
-      if name == "" then name = "Base Folder" end
+      -- TODO should we convert empty folder name to base set (?)
+      if name == "" then name = kBaseSetName end
       popup:entry{ id=tostring(i), text=name }:newrow()
     end
     popup:separator()
@@ -647,7 +629,7 @@ local function imi_ongui()
           imi.margin = 0
           for index,ti in ipairs(folder.items) do
             imi.pushID(index)
-            create_tile_view(folders, folder.items, index, activeLayer.tileset, ti, inRc, outSize2)
+            create_tile_view(folders, folder, index, activeLayer.tileset, ti, inRc, outSize2)
 
             if imi.beginDrag() then
               imi.setDragData("tile", { index=index, ti=ti, folder=folder.name })

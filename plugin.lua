@@ -601,6 +601,11 @@ local function imi_ongui()
             show_categories_selector(categories, activeTileset)
           end)
       end
+      imi.widget.onmousedown = function(widget) -- TODO merge this with regular imi.button() click
+        if imi.mouseButton == MouseButton.RIGHT then
+          show_categories_selector(categories, activeTileset)
+        end
+      end
 
       if imi.button("New Folder") then
         imi.afterGui(

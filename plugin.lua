@@ -253,8 +253,7 @@ local function setup_sprite(spr)
 end
 
 local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
-  -- TODO Probably we need a new Menu() widget
-  local popup = Dialog{ title="Tile", parent=imi.dlg }
+  local popup = Dialog{ parent=imi.dlg }
   local spr = activeLayer.sprite
 
   function forEachCategoryTileset(func)
@@ -277,7 +276,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   end
 
   function newEmpty()
-    app.transaction(
+    app.transaction("New Empty Attachment",
       function()
         local tile
         forEachCategoryTileset(
@@ -299,7 +298,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
   function duplicate()
     local origTile = ts:tile(ti)
-    app.transaction(
+    app.transaction("Duplicate Attachment",
       function()
         local tile
         forEachCategoryTileset(
@@ -317,7 +316,9 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
   function delete()
     table.remove(folder.items, indexInFolder)
-    activeLayer.properties(PK).folders = folders
+    app.transaction("Delete Folder", function()
+     activeLayer.properties(PK).folders = folders
+    end)
     popup:close()
   end
 
@@ -380,10 +381,10 @@ local function new_or_rename_category_dialog(categoryTileset)
   local name = ""
   local title
   if categoryTileset then
-    title = "Rename Category Name"
+    title = "Rename Category"
     name = categoryTileset.name
   else
-    title = "New Category Name"
+    title = "New Category"
   end
   local popup =
     Dialog{ title=title, parent=imi.dlg }
@@ -394,7 +395,9 @@ local function new_or_rename_category_dialog(categoryTileset)
   local data = popup.data
   if data.ok and data.name ~= "" then
     if categoryTileset then
-      categoryTileset.name = data.name
+      app.transaction("Rename Category", function()
+        categoryTileset.name = data.name
+      end)
     else
       local spr = activeLayer.sprite
 
@@ -405,7 +408,7 @@ local function new_or_rename_category_dialog(categoryTileset)
       end
 
       local id = calculate_new_category_id(spr)
-      app.transaction(function()
+      app.transaction("New Category", function()
         local cloned = spr:newTileset(activeLayer.tileset)
         cloned.properties(PK).id = id
         cloned.name = data.name
@@ -430,7 +433,7 @@ local function show_categories_selector(categories, activeTileset)
   end
 
   function delete()
-    app.transaction(function()
+    app.transaction("Delete Category", function()
       if categories then
         local catID = activeTileset.properties(PK).id
         local catIndex = find_index(categories, catID)
@@ -460,7 +463,10 @@ local function show_categories_selector(categories, activeTileset)
       popup:menuItem{ text=name, focus=checked,
                       onclick=function()
                         popup:close()
-                        activeLayer.tileset = find_tileset_by_categoryID(spr, categoryID)
+                        app.transaction("Select Category",
+                          function()
+                            activeLayer.tileset = find_tileset_by_categoryID(spr, categoryID)
+                          end)
                         app.refresh()
                       end }:newrow()
     end
@@ -483,10 +489,10 @@ local function new_or_rename_folder_dialog(folder)
   local name = ""
   local title
   if folder then
-    title = "Rename Folder Name"
+    title = "Rename Folder"
     name = folder.name
   else
-    title = "New Folder Name"
+    title = "New Folder"
   end
   local popup =
     Dialog{ title=title, parent=dlg }
@@ -513,12 +519,16 @@ end
 local function show_folder_context_menu(folders, folder)
   local function sortByIndex()
     table.sort(folder.items, function(a, b) return a < b end)
-    activeLayer.properties(PK).folders = folders
+    app.transaction("Sort Folder", function()
+      activeLayer.properties(PK).folders = folders
+    end)
   end
 
   local function rename()
     folder = new_or_rename_folder_dialog(folder)
-    activeLayer.properties(PK).folders = folders
+    app.transaction("Rename Folder", function()
+      activeLayer.properties(PK).folders = folders
+    end)
   end
 
   local function delete()
@@ -531,7 +541,9 @@ local function show_folder_context_menu(folders, folder)
     end
     if folderIndex > 0 then
       table.remove(folders, folderIndex)
-      activeLayer.properties(PK).folders = folders
+      app.transaction("Delete Folder", function()
+        activeLayer.properties(PK).folders = folders
+      end)
     end
   end
 
@@ -566,7 +578,8 @@ local function imi_ongui()
          spr.properties(PK).version < 1 then
     imi.sameLine = true
     if imi.button("Setup Sprite") then
-      app.transaction(function() setup_sprite(spr) end)
+      app.transaction("Setup Attachment System",
+                      function() setup_sprite(spr) end)
       imi.repaint = true
     end
   else

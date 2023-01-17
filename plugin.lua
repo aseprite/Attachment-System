@@ -109,17 +109,19 @@ end
 
 local function calculate_new_category_id(spr)
   local maxId = 0
-  for _,tileset in ipairs(spr.tilesets) do
-    if tileset.properties(PK).id then
+  for i=1,#spr.tilesets do
+    local tileset = spr.tilesets[i]
+    if tileset and tileset.properties(PK).id then
       maxId = math.max(maxId, tileset.properties(PK).id)
-      end
+    end
   end
   return maxId+1
 end
 
 local function find_tileset_by_categoryID(spr, categoryID)
-  for _,tileset in ipairs(spr.tilesets) do
-    if tileset.properties(PK).id == categoryID then
+  for i=1,#spr.tilesets do
+    local tileset = spr.tilesets[i]
+    if tileset and tileset.properties(PK).id == categoryID then
       return tileset
     end
   end
@@ -127,8 +129,9 @@ local function find_tileset_by_categoryID(spr, categoryID)
 end
 
 local function find_tileset_by_name(spr, name)
-  for _,tileset in ipairs(spr.tilesets) do
-    if tileset.name == name then
+  for i=1,#spr.tilesets do
+    local tileset = spr.tilesets[i]
+    if tileset and tileset.name == name then
       return tileset
     end
   end
@@ -246,8 +249,11 @@ end
 local function setup_sprite(spr)
   -- Setup the sprite DB
   spr.properties(PK).version = 1
-  for _,tileset in ipairs(spr.tilesets) do
-    tileset.properties(PK).id = calculate_new_category_id(spr)
+  for i=1,#spr.tilesets do
+    local tileset = spr.tilesets[i]
+    if tileset then
+      tileset.properties(PK).id = calculate_new_category_id(spr)
+    end
   end
   setup_layers(spr.layers)
 end
@@ -438,13 +444,17 @@ local function show_categories_selector(categories, activeTileset)
         local catID = activeTileset.properties(PK).id
         local catIndex = find_index(categories, catID)
 
-        -- First we set the tileset of the layer to the first category
-        activeLayer.tileset = find_tileset_by_categoryID(spr, categories[1])
-
         -- Remove the category/tileset
         table.remove(categories, catIndex)
         activeLayer.properties(PK).categories = categories
-        spr:deleteTileset(activeTileset)
+
+        -- We set the tileset of the layer to the first category available
+        local newTileset = find_tileset_by_categoryID(spr, categories[1])
+        local oldTileset = activeLayer.tileset
+        activeLayer.tileset = newTileset
+
+        -- Delete tileset from the sprite
+        spr:deleteTileset(oldTileset)
 
         app.refresh()
       end

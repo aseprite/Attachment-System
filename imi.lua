@@ -23,7 +23,7 @@
 --
 --   imi.label("Text")
 --   imi.image(image, srcRect, dstSize)
---   imi.beginViewport(visibleAreaSize)
+--   imi.beginViewport(visibleAreaSize, itemSize)
 --   imi.endViewport()
 --
 -- Drag-and-drop:

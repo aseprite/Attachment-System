@@ -441,6 +441,10 @@ function imi.getID()
   return id
 end
 
+----------------------------------------------------------------------
+-- Basic Widgets
+----------------------------------------------------------------------
+
 function imi.space(width)
   advanceCursor(
     Size(width, 1),
@@ -599,6 +603,10 @@ function imi.image(image, srcRect, dstSize)
 end
 
 function imi.beginViewport(size)
+----------------------------------------------------------------------
+-- Viewport
+----------------------------------------------------------------------
+
   local id = imi.getID()
 
   local border = 4*imi.uiScale -- TODO access theme styles
@@ -753,6 +761,10 @@ function imi.endViewport()
   imi.viewportWidget = nil
   imi.scrollableBounds = nil
 end
+
+----------------------------------------------------------------------
+-- Drag & Drop
+----------------------------------------------------------------------
 
 function imi.beginDrag()
   if imi.widget.pressed then

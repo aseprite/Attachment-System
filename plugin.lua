@@ -690,9 +690,9 @@ local function imi_ongui()
       -- Folders
 
       imi.rowHeight = 0
-      imi.viewport = Rectangle(imi.cursor.x, imi.cursor.y,
-                               imi.viewport.width - imi.cursor.x,
-                               imi.viewport.height - imi.cursor.y)
+      imi.pushViewport(Rectangle(imi.cursor.x, imi.cursor.y,
+                                 imi.viewport.width - imi.cursor.x,
+                                 imi.viewport.height - imi.cursor.y))
 
       for i,folder in ipairs(folders) do
         imi.pushID(i .. folder.name)
@@ -777,6 +777,8 @@ local function imi_ongui()
         end
         imi.popID()
       end
+
+      imi.popViewport()
     end
   end
 end

@@ -443,6 +443,34 @@ function imi.getID()
   return id
 end
 
+-- Execute something after the drawList is completely processed after imi.ongui()
+function imi.afterGui(func)
+  table.insert(imi.afterPaint, func)
+end
+
+----------------------------------------------------------------------
+-- Layout
+----------------------------------------------------------------------
+
+function imi.pushLayout()
+  table.insert(
+    imi.layoutStack,
+    { cursor=Point(imi.cursor),
+      drawList=imi.drawList,
+      rowHeight=imi.rowHeight })
+
+  imi.drawList = {}
+  imi.rowHeight = 0
+end
+
+function imi.popLayout()
+  local pop = imi.layoutStack[#imi.layoutStack]
+  imi.cursor = pop.cursor
+  imi.drawList = pop.drawList
+  imi.rowHeight = pop.rowHeight
+  table.remove(imi.layoutStack)
+end
+
 ----------------------------------------------------------------------
 -- Basic Widgets
 ----------------------------------------------------------------------
@@ -608,6 +636,21 @@ end
 -- Viewport
 ----------------------------------------------------------------------
 
+-- Push a rectagnel to act like a viewport/area to layout the
+-- following widgets. By default the first "viewport" is the whole
+-- window client area.
+function imi.pushViewport(rectangle)
+  table.insert(imi.viewportStack, imi.viewport)
+  imi.viewport = rectangle
+end
+
+function imi.popViewport()
+  imi.viewport = imi.viewportStack[#imi.viewportStack]
+  table.remove(imi.viewportStack)
+end
+
+-- Creates a scrollable viewport.
+--
 -- Fields:
 --   widget.resizedViewport = Size(numberOfColumns, numberOfRows)
 function imi.beginViewport(size, itemSize)
@@ -745,20 +788,14 @@ function imi.beginViewport(size, itemSize)
 
       imi.viewportWidget = widget
 
-      table.insert(imi.viewportStack, imi.viewport)
-      imi.viewport = Rectangle(bounds.x+border, bounds.y+border,
-                               bounds.width-2*border, bounds.height-2*border-barSize)
+      imi.pushViewport(Rectangle(bounds.x+border,
+                                 bounds.y+border,
+                                 bounds.width-2*border,
+                                 bounds.height-2*border-barSize))
     end)
 
-  table.insert(
-    imi.layoutStack,
-    { cursor=Point(imi.cursor),
-      drawList=imi.drawList,
-      rowHeight=imi.rowHeight })
-
+  imi.pushLayout()
   imi.cursor = imi.viewport.origin - imi.widgets[id].scrollPos
-  imi.drawList = {}
-  imi.rowHeight = 0
   imi.scrollableBounds = Rectangle(imi.cursor, Size(1, 1))
 end
 
@@ -768,21 +805,14 @@ function imi.endViewport()
   local hover = widget.hoverHBar
   local subDrawList = imi.drawList
 
-  imi.viewport = imi.viewportStack[#imi.viewportStack]
-  table.remove(imi.viewportStack)
-
-  local pop = imi.layoutStack[#imi.layoutStack]
+  imi.popViewport()
+  imi.popLayout()
 
   local border = 4*imi.uiScale -- TODO access theme styles
   local barSize = app.theme.dimension.mini_scrollbar_size
   widget.scrollableSize = imi.scrollableBounds.size
   widget.viewportSize = Size(bounds.width-border,
                              bounds.height-barSize-border-1*imi.uiScale)
-
-  imi.cursor = pop.cursor
-  imi.drawList = pop.drawList
-  imi.rowHeight = pop.rowHeight
-  table.remove(imi.layoutStack)
 
   addDrawListFunction(
     function()
@@ -874,10 +904,6 @@ function imi.getDropData(dataType)
   else
     return nil
   end
-end
-
-function imi.afterGui(func)
-  table.insert(imi.afterPaint, func)
 end
 
 return imi

@@ -82,6 +82,7 @@ local function initVars(ctx)
   imi.viewportStack = {}
   imi.idStack = {}
   imi.layoutStack = {}
+  imi.groupsStack = {}
   imi.beforePaint = {}
   imi.afterPaint = {}
   imi.lastBounds = nil
@@ -93,6 +94,7 @@ local function initVars(ctx)
   -- widget to the frontmost one, but it's iterated reversely to go
   -- from front to back.
   imi.mouseWidgets = {}
+  imi.mouseWidgetCandidates = {}
 end
 
 local function hasFlags(widget, flags)
@@ -165,6 +167,11 @@ local function advanceCursor(size, func)
   local bounds = Rectangle(imi.cursor, size)
   func(bounds)
 
+  if #imi.groupsStack > 0 then
+    local top = imi.groupsStack[#imi.groupsStack]
+    table.insert(top.widgets, imi.widget)
+  end
+
   if imi.scrollableBounds then
     imi.scrollableBounds = imi.scrollableBounds:union(bounds)
   end
@@ -232,11 +239,8 @@ local function updateWidget(id, values)
     widget[k] = v
   end
 
-  -- Add this widget to the list of mouseWidgets if it's in mousePos
-  if not widget.dragging and
-     pointInsideWidgetHierarchy(widget, imi.mousePos) then
-    table.insert(imi.mouseWidgets, widget)
-  end
+  -- Add this widget to the list of possible candidates for the mouseWidgets
+  table.insert(imi.mouseWidgetCandidates, widget)
 
   imi.widget = widget
   return widget
@@ -300,6 +304,15 @@ function imi.onpaint(ev)
       imi.isongui = true
       imi.ongui()
       imi.isongui = false
+
+      -- Build mouseWidgets collection (using its final bounds
+      -- position)
+      for _,widget in ipairs(imi.mouseWidgetCandidates) do
+        if not widget.dragging and
+           pointInsideWidgetHierarchy(widget, imi.mousePos) then
+          table.insert(imi.mouseWidgets, widget)
+        end
+      end
 
       if hadTargetWidget then
         imi.targetWidget = nil
@@ -472,6 +485,53 @@ function imi.popLayout()
 end
 
 ----------------------------------------------------------------------
+-- Groups
+----------------------------------------------------------------------
+
+function imi.beginGroup()
+  imi.pushLayout()
+  table.insert(imi.groupsStack, {
+    sameLine=imi.sameLine,
+    breakLines=imi.breakLines,
+    widgets={},
+    commonParent=imi.viewportWidget
+  })
+end
+
+function imi.endGroup()
+  local pop = imi.groupsStack[#imi.groupsStack]
+  local subDrawList = imi.drawList
+  imi.sameLine = pop.sameLine
+  imi.breakLines = pop.breakLines
+
+  -- Calculate the bounds of the whole group
+  local bounds = Rectangle()
+  for _,w in ipairs(pop.widgets) do
+    if w.parent == pop.commonParent then
+      bounds = bounds:union(w.bounds)
+    end
+  end
+
+  -- Try to advance from the initial position of the group (when
+  -- beginGroup was called), the group of the bounds.size
+  imi.popLayout()
+  advanceCursor(
+    bounds.size,
+    function(newBounds)
+      local delta = newBounds.origin - bounds.origin
+      for _,w in ipairs(pop.widgets) do
+        w.bounds.origin = w.bounds.origin + delta
+      end
+    end)
+
+  table.remove(imi.groupsStack)
+
+  for i,cmd in ipairs(subDrawList) do
+    table.insert(imi.drawList, cmd)
+  end
+end
+
+----------------------------------------------------------------------
 -- Basic Widgets
 ----------------------------------------------------------------------
 
@@ -489,14 +549,14 @@ function imi.label(text)
   advanceCursor(
     textSize,
     function(bounds)
-      updateWidget(id, { bounds=bounds })
+      local widget = updateWidget(id, { bounds=bounds })
 
       addDrawListFunction(
         function(ctx)
-          if imi.widgets[id].color then
-            ctx.color = imi.widgets[id].color
+          if widget.color then
+            ctx.color = widget.color
           end
-          ctx:fillText(text, bounds.x, bounds.y)
+          ctx:fillText(text, widget.bounds.x, widget.bounds.y)
         end)
     end)
 end
@@ -508,12 +568,11 @@ function imi._toggle(id, text)
   advanceCursor(
     size,
     function(bounds)
-      updateWidget(id, { bounds=bounds })
-
+      local widget = updateWidget(id, { bounds=bounds })
       local draggingProcessed = false
 
       function drawWidget(ctx)
-        local widget = imi.widgets[id]
+        local bounds = widget.bounds
 
         if widget.dragging and not draggingProcessed then
           draggingProcessed = true
@@ -597,7 +656,7 @@ function imi.image(image, srcRect, dstSize)
   advanceCursor(
     dstSize,
     function(bounds)
-      updateWidget(id, { bounds=bounds })
+      local widget = updateWidget(id, { bounds=bounds })
 
       -- Draw this widget only if it's visible through the current
       -- viewport (if we are in a viewport)
@@ -605,7 +664,6 @@ function imi.image(image, srcRect, dstSize)
         local draggingProcessed = false
 
         local function drawWidget(ctx)
-          local widget = imi.widgets[id]
           local bounds = widget.bounds
 
           if widget.dragging and not draggingProcessed then
@@ -685,6 +743,7 @@ function imi.beginViewport(size, itemSize)
       imi.mouseCursor = MouseCursor.SE_RESIZE
     elseif widget.draggingHBar then
       local maxScrollPos = widget.scrollableSize - widget.viewportSize
+      local oldScrollPos = Point(widget.scrollPos)
 
       if widget.hoverHBar then
         local info = getScrollInfo(widget)
@@ -697,7 +756,10 @@ function imi.beginViewport(size, itemSize)
       end
       widget.scrollPos.y = 0
       widget.scrollPos.x = imi.clamp(widget.scrollPos.x, 0, maxScrollPos.width)
-      imi.dlg:repaint()
+
+      if oldScrollPos ~= widget.scrollPos then
+        imi.dlg:repaint()
+      end
       imi.mouseCursor = MouseCursor.GRABBING
     else
       local oldHoverHBar = widget.hoverHBar
@@ -788,7 +850,6 @@ function imi.beginViewport(size, itemSize)
       end
 
       imi.viewportWidget = widget
-
       imi.pushViewport(Rectangle(bounds.x+border,
                                  bounds.y+border,
                                  bounds.width-2*border,
@@ -817,6 +878,7 @@ function imi.endViewport()
 
   addDrawListFunction(
     function()
+      local bounds = widget.bounds
       imi.ctx:drawThemeRect('sunken_normal', bounds)
 
       local bgPart, thumbPart
@@ -839,18 +901,20 @@ function imi.endViewport()
                             bounds.x+border+info.pos,
                             bounds.y+bounds.height-barSize-border-1*imi.uiScale,
                             info.len, barSize)
+
+      -- Draw sub items (using the current widget.bounds)
+      table.insert(imi.drawList, { type="save" })
+      table.insert(imi.drawList, { type="clip",
+                                   bounds=Rectangle(bounds.x+border,
+                                                    bounds.y+border,
+                                                    bounds.width-2*border,
+                                                    bounds.height-2*border) })
+      for i,cmd in ipairs(subDrawList) do
+        table.insert(imi.drawList, cmd)
+      end
+      table.insert(imi.drawList, { type="restore" })
     end)
 
-  table.insert(imi.drawList, { type="save" })
-  table.insert(imi.drawList, { type="clip",
-                               bounds=Rectangle(bounds.x+border,
-                                                bounds.y+border,
-                                                bounds.width-2*border,
-                                                bounds.height-2*border) })
-  for i,cmd in ipairs(subDrawList) do
-    table.insert(imi.drawList, cmd)
-  end
-  table.insert(imi.drawList, { type="restore" })
   imi.viewportWidget = nil
   imi.scrollableBounds = nil
 end
@@ -860,16 +924,18 @@ end
 ----------------------------------------------------------------------
 
 function imi.beginDrag()
-  if imi.widget.pressed then
-    if imi.widget.dragging then
-      local pt = imi.widget.bounds.origin
+  local widget = imi.widget
+
+  if widget.pressed then
+    if widget.dragging then
+      local pt = widget.bounds.origin
       local delta = imi.mousePos - dragStartMousePos
-      pt = pt + (imi.mousePos - dragStartMousePos)
-      if imi.widget.bounds.origin ~= pt then
-        local id = imi.widget.id
+      pt = pt + delta
+      if widget.bounds.origin ~= pt then
         addDrawListFunction(
           function()
-            imi.widgets[id].bounds.origin = pt
+            widget.bounds.origin =
+              widget.bounds.origin + delta
           end)
       end
     else

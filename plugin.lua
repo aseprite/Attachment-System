@@ -696,9 +696,11 @@ local function imi_ongui()
 
       for i,folder in ipairs(folders) do
         imi.pushID(i .. folder.name)
-        imi.sameLine = false
+        imi.sameLine = true
         imi.breakLines = true
 
+        imi.beginGroup()
+        imi.sameLine = false
         local openFolder = imi.toggle(folder.name)
 
         -- Context menu for active tile
@@ -775,6 +777,7 @@ local function imi_ongui()
           imi.endViewport()
           imi.margin = 4*imi.uiScale
         end
+        imi.endGroup()
         imi.popID()
       end
 

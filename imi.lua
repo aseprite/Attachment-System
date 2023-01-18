@@ -664,6 +664,7 @@ function imi.beginViewport(size, itemSize)
 
   local border = 4*imi.uiScale -- TODO access theme styles
   local barSize = app.theme.dimension.mini_scrollbar_size
+  size.width = size.width + 2*border
   size.height = size.height + 2*border + barSize
 
   local function onmousemove(widget)

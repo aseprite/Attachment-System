@@ -723,7 +723,7 @@ local function imi_ongui()
 
           imi.widget.onviewportresized = function(size)
             app.transaction("Resize Folder", function()
-              folder.viewport = { width=size.width, height=size.height }
+              folder.viewport = Size(size.width, size.height)
               activeLayer.properties(PK).folders = folders
               imi.dlg:repaint()
             end)

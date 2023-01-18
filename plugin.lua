@@ -18,7 +18,8 @@
 --   categories={ categoryID1, categoryID2, etc. },
 --   folders={
 --     { name="Folder Name",
---       items={ tileIndex1, tileIndex2, ... } }
+--       items={ tileIndex1, tileIndex2, ... },
+--       viewport=Size(columns, rows) }
 --   },
 -- }
 --
@@ -711,7 +712,22 @@ local function imi_ongui()
           -- One viewport for each opened folder
           local outSize2 = Size(outSize.width*3/4, outSize.height*3/4)
           imi.beginViewport(Size(imi.viewport.width,
-                                 outSize2.height))
+                                 outSize2.height),
+                            outSize2)
+
+          -- If we are not resizing the viewport, we restore the
+          -- viewport size stored in the folder
+          if folder.viewport and not imi.widget.draggingResize then
+            imi.widget.resizedViewport = folder.viewport
+          end
+
+          imi.widget.onviewportresized = function(size)
+            app.transaction("Resize Folder", function()
+              folder.viewport = { width=size.width, height=size.height }
+              activeLayer.properties(PK).folders = folders
+              imi.dlg:repaint()
+            end)
+          end
 
           if imi.beginDrop() then
             local data = imi.getDropData("tile")

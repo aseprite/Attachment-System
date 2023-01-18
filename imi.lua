@@ -239,11 +239,13 @@ local function updateWidget(id, values)
   end
 
   imi.widget = widget
+  return widget
 end
 
 local dragStartMousePos = Point(0, 0)
 local dragStartScrollPos = Point(0, 0)
 local dragStartScrollBarPos = 0
+local dragStartViewportSize = Size(0, 0)
 
 local function getScrollInfo(widget)
   local fullLen = widget.viewportSize.width-3*imi.uiScale
@@ -602,22 +604,42 @@ function imi.image(image, srcRect, dstSize)
   return imi.widget.checked
 end
 
-function imi.beginViewport(size)
 ----------------------------------------------------------------------
 -- Viewport
 ----------------------------------------------------------------------
 
+-- Fields:
+--   widget.resizedViewport = Size(numberOfColumns, numberOfRows)
+function imi.beginViewport(size, itemSize)
   local id = imi.getID()
+  local widget = updateWidget(id, { })
+
+  if widget.resizedViewport then
+    size = Size(widget.resizedViewport.width * itemSize.width,
+                widget.resizedViewport.height * itemSize.height)
+  end
 
   local border = 4*imi.uiScale -- TODO access theme styles
   local barSize = app.theme.dimension.mini_scrollbar_size
   size.height = size.height + 2*border + barSize
 
   local function onmousemove(widget)
-    local widget = imi.widgets[id]
     local bounds = widget.bounds
 
-    if widget.draggingHBar then
+    if widget.draggingResize then
+      local oldResizedViewport = widget.resizedViewport
+
+      widget.resizedViewport = Size(
+        (dragStartViewportSize.width + (imi.mousePos.x - dragStartMousePos.x)+itemSize.width/2) / itemSize.width,
+        (dragStartViewportSize.height + (imi.mousePos.y - dragStartMousePos.y)+itemSize.height/2) / itemSize.height)
+      widget.resizedViewport.width = math.max(widget.resizedViewport.width, 1)
+      widget.resizedViewport.height = math.max(widget.resizedViewport.height, 1)
+
+      if oldResizedViewport ~= widget.resizedViewport then
+        imi.dlg:repaint()
+      end
+      imi.mouseCursor = MouseCursor.SE_RESIZE
+    elseif widget.draggingHBar then
       local maxScrollPos = widget.scrollableSize - widget.viewportSize
 
       if widget.hoverHBar then
@@ -632,23 +654,51 @@ function imi.beginViewport(size)
       widget.scrollPos.y = 0
       widget.scrollPos.x = imi.clamp(widget.scrollPos.x, 0, maxScrollPos.width)
       imi.dlg:repaint()
-
       imi.mouseCursor = MouseCursor.GRABBING
     else
       local oldHoverHBar = widget.hoverHBar
+      local oldHoverVBar = widget.hoverVBar
+
       widget.hoverHBar =
         (imi.mousePos.y >= bounds.y+bounds.height-barSize-4*imi.uiScale and
          imi.mousePos.y <= bounds.y+bounds.height)
+
+      widget.hoverVBar =
+        (imi.mousePos.x >= bounds.x+bounds.width-barSize-4*imi.uiScale and
+         imi.mousePos.x <= bounds.x+bounds.width)
+
       if oldHoverHBar ~= widget.hoverHBar then
+        imi.dlg:repaint()
+      end
+
+      local oldHoverResize = widget.hoverResize
+      widget.hoverResize =
+        widget.hoverHBar and
+        widget.hoverVBar
+      if widget.hoverResize then
+        imi.mouseCursor = MouseCursor.SE_RESIZE
+      end
+      if oldHoverResize ~= widget.hoverResize then
         imi.dlg:repaint()
       end
     end
   end
 
   local function onmousedown(widget)
-    if widget.hoverHBar or
+    if widget.hoverResize then
+      widget.draggingResize = true
+
+      imi.capturedWidget = widget
+      dragStartMousePos = Point(imi.mousePos)
+      if not widget.resizedViewport then
+        widget.resizedViewport = Size(widget.bounds.width / itemSize.width,
+                                      widget.bounds.height / itemSize.height)
+      end
+      dragStartViewportSize = Size(widget.bounds.size)
+    elseif widget.hoverHBar or
        imi.mouseButton == MouseButton.MIDDLE then
       widget.draggingHBar = true
+
       imi.capturedWidget = widget
       dragStartMousePos = Point(imi.mousePos)
       dragStartScrollPos = Point(widget.scrollPos)
@@ -657,7 +707,13 @@ function imi.beginViewport(size)
   end
 
   local function onmouseup(widget)
-    if widget.draggingHBar then
+    if widget.draggingResize then
+      if widget.onviewportresized then
+        widget.onviewportresized(widget.resizedViewport)
+      end
+
+      widget.draggingResize = false
+    elseif widget.draggingHBar then
       widget.draggingHBar = false
     end
     imi.dlg:repaint()
@@ -666,6 +722,12 @@ function imi.beginViewport(size)
   advanceCursor(
     size,
     function(bounds)
+      -- Limit this viewport width with the current available
+      -- viewport/window size
+      if bounds.x + bounds.width > imi.viewport.x + imi.viewport.width then
+        bounds.width = (imi.viewport.x + imi.viewport.width) - bounds.x
+      end
+
       updateWidget(
         id,
         { bounds=bounds,

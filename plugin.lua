@@ -645,10 +645,7 @@ local function imi_ongui()
 
       imi.space(2*imi.uiScale)
       if imi.button("Options") then
-        imi.afterGui(
-          function()
-            show_options()
-          end)
+        imi.afterGui(show_options)
       end
 
       imi.sameLine = false

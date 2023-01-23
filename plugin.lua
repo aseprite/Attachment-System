@@ -720,10 +720,8 @@ local function editTile()
   popup:separator():newrow()
   popup:menuItem{ text="New Empty", onclick=newEmpty }:newrow()
   popup:menuItem{ text="Duplicate", onclick=duplicate }:newrow()
-  if folder and not is_base_set_folder(folder) then
-    popup:separator()
-    popup:menuItem{ text="Delete", onclick=delete }
-  end
+  popup:separator()
+  popup:menuItem{ text="Delete", onclick=delete }
   popup:showMenu()
   imi.repaint = true
 end

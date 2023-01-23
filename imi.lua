@@ -694,7 +694,7 @@ end
 -- Viewport
 ----------------------------------------------------------------------
 
--- Push a rectagnel to act like a viewport/area to layout the
+-- Push a rectangle to act like a viewport/area to layout the
 -- following widgets. By default the first "viewport" is the whole
 -- window client area.
 function imi.pushViewport(rectangle)

@@ -700,7 +700,7 @@ local function imi_ongui()
         imi.sameLine = false
         local openFolder = imi.toggle(folder.name)
 
-        -- Context menu for active tile
+        -- Context menu for active folder
         imi.widget.onmousedown = function(widget)
           if imi.mouseButton == MouseButton.RIGHT then
             show_folder_context_menu(folders, folder)

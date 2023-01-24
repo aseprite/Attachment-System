@@ -734,14 +734,12 @@ local function imi_ongui()
           if imi.beginDrop() then
             local data = imi.getDropData("tile")
             if data then
-              -- Drag-and-drop in the same folder, move the tile to the end
-              if data.folder == folder.name then
-                table.remove(folder.items, data.index)
+              if data.folder ~= folder.name then
+                -- Drop a new item at the end of this folder
+                table.insert(folder.items, data.ti)
+                activeLayer.properties(PK).folders = folders
+                imi.repaint = true
               end
-              -- Drop a new item at the end of this folder
-              table.insert(folder.items, data.ti)
-              activeLayer.properties(PK).folders = folders
-              imi.repaint = true
             end
           end
 

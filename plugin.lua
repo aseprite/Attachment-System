@@ -119,6 +119,16 @@ local function calculate_shrunken_bounds(tilemapLayer)
   return bounds
 end
 
+local function calculate_shrunken_bounds_from_tileset(tileset)
+  local bounds = Rectangle()
+  local ntiles = #tileset
+  for i = 0,ntiles-1 do
+    local tileImg = tileset:getTile(i)
+    bounds = bounds:union(tileImg:shrinkBounds())
+  end
+  return bounds
+end
+
 local function calculate_tiles_histogram(tilemapLayer)
   local histogram = {}
   for _,cel in ipairs(tilemapLayer.cels) do
@@ -321,31 +331,37 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     return tileBoundsOnSprite
   end
 
-  local function modifyPoints()
+  -- Variables and Functions associated to editRefAnchors() and editTile()
+
+  local instanceOn -- "sprite" / "new_sprite" / "multiple_tile_instances"
+  local originalLayer
+  local originalCanvasBounds
+  local tempSprite
+  local layerEditableStates = {}
+
+  local function lockLayers()
+    for i=1,#spr.layers, 1 do
+      table.insert(layerEditableStates, spr.layers[i].isEditable)
+      spr.layers[i].isEditable = false
+    end
+  end
+
+  local function unlockLayers()
+    for i=1,#layerEditableStates, 1 do
+      spr.layers[i].isEditable = layerEditableStates[i]
+    end
+  end
+
+  local function editRefAnchors()
     app.transaction(
       function()
-        local instanceOn = "new_sprite" -- "sprite" / "new_sprite" / "multiple_tile_instances"
-        local originalLayer = activeLayer
-        local originalCanvasBounds = dlg.bounds
-        local originalTool = app.activeTool.id
-        local oldAnchors = {}
+        instanceOn = "new_sprite" -- "sprite" / "new_sprite" / "multiple_tile_instances"
+        originalLayer = activeLayer
+        originalCanvasBounds = dlg.bounds
         tempLayers = {}
-        local tempSlice
-        local tempSprite
-        local layerEditableStates = {}
-
-        local function lockLayers()
-          for i=1,#spr.layers, 1 do
-            table.insert(layerEditableStates, spr.layers[i].isEditable)
-            spr.layers[i].isEditable = false
-          end
-        end
-
-        local function unlockLayers()
-          for i=1,#layerEditableStates, 1 do
-            spr.layers[i].isEditable = layerEditableStates[i]
-          end
-        end
+        layerEditableStates = {}
+        oldAnchors = {}
+        local originalTool = app.activeTool.id
 
         local function cancel()
           anchorChecksEntriesPopup:close()
@@ -491,7 +507,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           regenerateAnchorChecksEntriesPopup()
         end
 
-        local function turnToReferenceView()
+        local function turnToEditRefAnchorsView()
           local temp = app.preferences.advanced_mode.show_alert
           app.preferences.advanced_mode.show_alert = false
           app.command.AdvancedMode{}
@@ -535,6 +551,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           table.insert(tileBoundsOnSprite, tempSprite.cels[1].image.bounds)
           addSliceForReferencePoint(tempSprite, tileBounds)
           addTempLayers(tempSprite, tileBounds)
+          app.command.FitScreen{}
         elseif #tileBoundsOnSprite >= 1 then
           local tileBounds = tileBoundsOnSprite[1]
           instanceOn = "sprite"
@@ -545,8 +562,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           --TODO: include in the New Anchor Poin dialog an instance selector
           -- instanceOn = "multiple_tile_instances"
         end
-        turnToReferenceView()
-        if instanceOn == "new_sprite" then app.command.FitScreen{} end
+        turnToEditRefAnchorsView()
 
         local function backToSprite()
           anchorPopup:close()
@@ -600,7 +616,56 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         popup:close()
         dlg.bounds = Rectangle(0, 0, 1, 1)
       end)
-    popup:close()
+  end
+
+
+local function editTile()
+    app.transaction(
+      function()
+        instanceOn = "new_sprite" -- "sprite" / "new_sprite" / "multiple_tile_instances"
+        originalLayer = activeLayer
+        originalCanvasBounds = dlg.bounds
+        layerEditableStates = {}
+        local originalLayersOpacity = {}
+
+        local function cancel()
+          if tempSprite ~= nil then
+            tempSprite:close()
+          end
+          dlg.bounds = originalCanvasBounds
+          unlockLayers()
+        end
+
+        local editTilePopup = Dialog{ title="Edit Tile", onclose=cancel }
+        local tileShrunkenBounds = calculate_shrunken_bounds_from_tileset(ts)
+        local tileSize = ts.grid.tileSize
+        tempSprite = Sprite(tileSize.width, tileSize.height)
+        local palette = spr.palettes[1]
+        tempSprite.palettes[1]:resize(#palette)
+        for i=0, #palette-1, 1 do
+          tempSprite.palettes[1]:setColor(i, palette:getColor(i))
+        end
+        tempSprite.cels[1].image = ts:tile(ti).image
+
+        local function accept()
+          if tempSprite ~= nil then
+            local image = Image(ts:tile(ti).image.width, ts:tile(ti).image.height)
+            image:drawImage(app.activeCel.image, app.activeCel.position)
+            ts:tile(ti).image = image
+          end
+          editTilePopup:close()
+        end
+
+        editTilePopup:button{ text="Cancel", onclick=function() editTilePopup:close() end }
+        editTilePopup:button{ text="OK", onclick=accept }:newrow()
+        editTilePopup:show{ wait=false }
+        editTilePopup.bounds = Rectangle(120*imi.uiScale,
+                                         60*imi.uiScale,
+                                         editTilePopup.bounds.width,
+                                         editTilePopup.bounds.height)
+        popup:close()
+        dlg.bounds = Rectangle(0, 0, 1, 1)
+      end)
   end
 
   function forEachCategoryTileset(func)
@@ -669,7 +734,8 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     popup:close()
   end
 
-  popup:menuItem{ text="Modify Points", onclick=modifyPoints }:newrow()
+  popup:menuItem{ text="Edit Ref/Anchors", onclick=editRefAnchors }:newrow()
+  popup:menuItem{ text="Edit Tile", onclick=editTile }:newrow()
   popup:separator():newrow()
   popup:menuItem{ text="New Empty", onclick=newEmpty }:newrow()
   popup:menuItem{ text="Duplicate", onclick=duplicate }:newrow()

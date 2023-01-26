@@ -341,6 +341,7 @@ function imi.onpaint(ev)
         elseif cmd.type == "restore" then
           ctx:restore()
         elseif cmd.type == "clip" then
+          ctx:beginPath()
           ctx:rect(cmd.bounds)
           ctx:clip()
         end

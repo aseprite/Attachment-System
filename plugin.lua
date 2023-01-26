@@ -76,7 +76,7 @@ end
 
 if anchorCrossImageT == nil then
   anchorCrossImageT = Image(3, 3)
-  local opacity = 64
+  local opacity = 128
   anchorCrossImageT:drawPixel(1, 0, Color(0,0,0, opacity))
   anchorCrossImageT:drawPixel(0, 1, Color(0,0,0, opacity))
   anchorCrossImageT:drawPixel(2, 1, Color(0,0,0, opacity))
@@ -331,32 +331,36 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     return tileBoundsOnSprite
   end
 
-  -- Variables and Functions associated to editRefAnchors() and editTile()
+  -- Variables and Functions associated to editAnchors() and editTile()
 
   local instanceOn -- "sprite" / "new_sprite" / "multiple_tile_instances"
-  local originalLayer
+  local originalLayer = activeLayer
   local originalCanvasBounds
   local tempSprite
   local layerEditableStates = {}
 
   local function lockLayers()
     for i=1,#spr.layers, 1 do
-      table.insert(layerEditableStates, spr.layers[i].isEditable)
+      table.insert(layerEditableStates, { editable=spr.layers[i].isEditable,
+                                          opacity=spr.layers[i].opacity })
+      if spr.layers[i] ~= originalLayer then
+        spr.layers[i].opacity = 64
+      end
       spr.layers[i].isEditable = false
     end
   end
 
   local function unlockLayers()
     for i=1,#layerEditableStates, 1 do
-      spr.layers[i].isEditable = layerEditableStates[i]
+      spr.layers[i].isEditable = layerEditableStates[i].editable
+      spr.layers[i].opacity = layerEditableStates[i].opacity
     end
   end
 
-  local function editRefAnchors()
+  local function editAnchors()
     app.transaction(
       function()
         instanceOn = "new_sprite" -- "sprite" / "new_sprite" / "multiple_tile_instances"
-        originalLayer = activeLayer
         originalCanvasBounds = dlg.bounds
         tempLayers = {}
         layerEditableStates = {}
@@ -369,16 +373,14 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           for i=1, #tempLayers, 1 do
             app.activeSprite:deleteLayer(tempLayers[i])
           end
-          if tempSlice ~= nil then
-            app.activeSprite:deleteSlice(tempSlice)
-          end
           if tempSprite ~= nil then
             tempSprite:close()
           end
           app.command.AdvancedMode{}
-          app.activeTool = originalTool
-          dlg.bounds = originalCanvasBounds
           unlockLayers()
+          dlg.bounds = originalCanvasBounds
+          app.activeLayer = originalLayer
+          app.activeTool = originalTool
           tempLayersLock = false
         end
 
@@ -395,22 +397,6 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
               sprite:newCel(tempLayers[i], app.activeFrame, anchorCrossImage, pos)
               tempLayers[i].name = "anchor_" .. i
             end
-          end
-        end
-
-        local function addSliceForReferencePoint(sprite, tileBounds)
-          local sliceSize = Size(sprite.width * 100, sprite.height * 100)
-          tempSlice = sprite:newSlice(Rectangle(tileBounds.x - sliceSize.width / 2,
-                                                tileBounds.y - sliceSize.height / 2,
-                                                sliceSize.width,
-                                                sliceSize.height))
-          tempSlice.center = Rectangle(0, 0, sliceSize.width / 2, sliceSize.height / 2)
-          local sliceCenter = Point(tempSlice.center.width, tempSlice.center.height)
-          tempSlice.color = Color(0, 0 , 0)
-          local reference = ts:tile(ti).properties(PK).referencePoint
-          if reference ~= nil then
-            local origin = reference + tileBounds.origin - sliceCenter
-            tempSlice.bounds = Rectangle(origin.x, origin.y, sliceSize.width, sliceSize.height)
           end
         end
 
@@ -507,14 +493,14 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           regenerateAnchorChecksEntriesPopup()
         end
 
-        local function turnToEditRefAnchorsView()
+        local function turnToeditAnchorsView()
           local temp = app.preferences.advanced_mode.show_alert
           app.preferences.advanced_mode.show_alert = false
           app.command.AdvancedMode{}
           app.command.AdvancedMode{}
           app.preferences.advanced_mode.show_alert = temp
           dlg.bounds = Rectangle(0, 0, 1, 1)
-          app.activeTool = "slice"
+          app.activeTool = "move"
         end
 
         local function fillEntries()
@@ -549,20 +535,18 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           tempSprite = Sprite(tileBounds.width, tileBounds.height)
           tempSprite.cels[1].image = ts:tile(ti).image
           table.insert(tileBoundsOnSprite, tempSprite.cels[1].image.bounds)
-          addSliceForReferencePoint(tempSprite, tileBounds)
           addTempLayers(tempSprite, tileBounds)
           app.command.FitScreen{}
         elseif #tileBoundsOnSprite >= 1 then
           local tileBounds = tileBoundsOnSprite[1]
           instanceOn = "sprite"
           lockLayers()
-          addSliceForReferencePoint(spr, tileBounds)
           addTempLayers(spr, tileBounds)
         --else -- multiple tileBoundsOnSprite
           --TODO: include in the New Anchor Poin dialog an instance selector
           -- instanceOn = "multiple_tile_instances"
         end
-        turnToEditRefAnchorsView()
+        turnToeditAnchorsView()
 
         local function backToSprite()
           anchorPopup:close()
@@ -571,8 +555,6 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         local function acceptPoints()
           local tileProperty = originalLayer.tileset:tile(ti).properties(PK)
           local tileBounds = tileBoundsOnSprite[1]
-          local sliceCenter = Point(tempSlice.center.width, tempSlice.center.height)
-          tileProperty.referencePoint = sliceCenter + tempSlice.bounds.origin - tileBounds.origin
           tileProperty.anchors = {}
 
           local tempAnchors = {}
@@ -633,7 +615,6 @@ local function editTile()
             tempSprite:close()
           end
           dlg.bounds = originalCanvasBounds
-          unlockLayers()
         end
 
         local editTilePopup = Dialog{ title="Edit Tile", onclose=cancel }
@@ -734,7 +715,7 @@ local function editTile()
     popup:close()
   end
 
-  popup:menuItem{ text="Edit Ref/Anchors", onclick=editRefAnchors }:newrow()
+  popup:menuItem{ text="Edit Anchors", onclick=editAnchors }:newrow()
   popup:menuItem{ text="Edit Tile", onclick=editTile }:newrow()
   popup:separator():newrow()
   popup:menuItem{ text="New Empty", onclick=newEmpty }:newrow()

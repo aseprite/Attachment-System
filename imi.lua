@@ -80,6 +80,7 @@ local function initVars(ctx)
   imi.breakLines = true
   imi.viewport = Rectangle(0, 0, ctx.width, ctx.height)
   imi.viewportStack = {}
+  imi.containersStack = {}
   imi.idStack = {}
   imi.layoutStack = {}
   imi.groupsStack = {}
@@ -251,7 +252,7 @@ local dragStartScrollPos = Point(0, 0)
 local dragStartScrollBarPos = 0
 local dragStartViewportSize = Size(0, 0)
 
-local function getScrollInfo(widget)
+local function getHScrollInfo(widget)
   local fullLen = widget.viewportSize.width-3*imi.uiScale
   local len = fullLen
   local pos = widget.scrollPos.x
@@ -261,6 +262,24 @@ local function getScrollInfo(widget)
     len = fullLen * widget.viewportSize.width / widget.scrollableSize.width
     len = imi.clamp(len, app.theme.dimension.scrollbar_size, fullLen)
     pos = (fullLen-len) * pos / (widget.scrollableSize.width-widget.viewportSize.width)
+    pos = imi.clamp(pos, 0, fullLen-len)
+  else
+    len = 0
+    pos = 0
+  end
+  return { fullLen=fullLen, len=len, pos=pos }
+end
+
+local function getVScrollInfo(widget)
+  local fullLen = widget.viewportSize.height-3*imi.uiScale
+  local len = fullLen
+  local pos = widget.scrollPos.y
+  if widget.scrollableSize.height <= widget.viewportSize.height then
+    pos = 0
+  elseif widget.scrollableSize.height > 0 then
+    len = fullLen * widget.viewportSize.height / widget.scrollableSize.height
+    len = imi.clamp(len, app.theme.dimension.scrollbar_size, fullLen)
+    pos = (fullLen-len) * pos / (widget.scrollableSize.height-widget.viewportSize.height)
     pos = imi.clamp(pos, 0, fullLen-len)
   else
     len = 0
@@ -715,6 +734,7 @@ end
 function imi.beginViewport(size, itemSize)
   local id = imi.getID()
   local widget = updateWidget(id, { })
+  local oldViewportWidget = imi.viewportWidget
 
   if widget.resizedViewport then
     size = Size(widget.resizedViewport.width * itemSize.width,
@@ -723,7 +743,7 @@ function imi.beginViewport(size, itemSize)
 
   local border = 4*imi.uiScale -- TODO access theme styles
   local barSize = app.theme.dimension.mini_scrollbar_size
-  size.width = size.width + 2*border
+  size.width = size.width + 2*border + barSize
   size.height = size.height + 2*border + barSize
 
   local function onmousemove(widget)
@@ -747,16 +767,32 @@ function imi.beginViewport(size, itemSize)
       local oldScrollPos = Point(widget.scrollPos)
 
       if widget.hoverHBar then
-        local info = getScrollInfo(widget)
+        local info = getHScrollInfo(widget)
         local pos = dragStartScrollBarPos + (imi.mousePos - dragStartMousePos)
-        pos.y = 0
         pos.x = imi.clamp(pos.x, 0, info.fullLen - info.len)
         widget.scrollPos.x = maxScrollPos.width * pos.x / (info.fullLen - info.len)
       else
         widget.scrollPos = dragStartScrollPos + (dragStartMousePos - imi.mousePos)
       end
-      widget.scrollPos.y = 0
       widget.scrollPos.x = imi.clamp(widget.scrollPos.x, 0, maxScrollPos.width)
+
+      if oldScrollPos ~= widget.scrollPos then
+        imi.dlg:repaint()
+      end
+      imi.mouseCursor = MouseCursor.GRABBING
+    elseif widget.draggingVBar then
+      local maxScrollPos = widget.scrollableSize - widget.viewportSize
+      local oldScrollPos = Point(widget.scrollPos)
+
+      if widget.hoverVBar then
+        local info = getVScrollInfo(widget)
+        local pos = dragStartScrollBarPos + (imi.mousePos - dragStartMousePos)
+        pos.y = imi.clamp(pos.y, 0, info.fullLen - info.len)
+        widget.scrollPos.y = maxScrollPos.height * pos.y / (info.fullLen - info.len)
+      else
+        widget.scrollPos = dragStartScrollPos + (dragStartMousePos - imi.mousePos)
+      end
+      widget.scrollPos.y = imi.clamp(widget.scrollPos.y, 0, maxScrollPos.height)
 
       if oldScrollPos ~= widget.scrollPos then
         imi.dlg:repaint()
@@ -774,7 +810,8 @@ function imi.beginViewport(size, itemSize)
         (imi.mousePos.x >= bounds.x+bounds.width-barSize-4*imi.uiScale and
          imi.mousePos.x <= bounds.x+bounds.width)
 
-      if oldHoverHBar ~= widget.hoverHBar then
+      if oldHoverHBar ~= widget.hoverHBar or
+         oldHoverVBar ~= widget.hoverVBar then
         imi.dlg:repaint()
       end
 
@@ -809,7 +846,14 @@ function imi.beginViewport(size, itemSize)
       imi.capturedWidget = widget
       dragStartMousePos = Point(imi.mousePos)
       dragStartScrollPos = Point(widget.scrollPos)
-      dragStartScrollBarPos = getScrollInfo(widget).pos
+      dragStartScrollBarPos = getHScrollInfo(widget).pos
+    elseif widget.hoverVBar then
+      widget.draggingVBar = true
+
+      imi.capturedWidget = widget
+      dragStartMousePos = Point(imi.mousePos)
+      dragStartScrollPos = Point(widget.scrollPos)
+      dragStartScrollBarPos = getVScrollInfo(widget).pos
     end
   end
 
@@ -822,6 +866,8 @@ function imi.beginViewport(size, itemSize)
       widget.draggingResize = false
     elseif widget.draggingHBar then
       widget.draggingHBar = false
+    elseif widget.draggingVBar then
+      widget.draggingVBar = false
     end
     imi.dlg:repaint()
   end
@@ -846,6 +892,9 @@ function imi.beginViewport(size, itemSize)
       if widget.draggingHBar == nil then
         widget.draggingHBar = false
       end
+      if widget.draggingVBar == nil then
+        widget.draggingVBar = false
+      end
       if widget.scrollPos == nil then
         widget.scrollPos = Point(0, 0)
       end
@@ -853,9 +902,11 @@ function imi.beginViewport(size, itemSize)
       imi.viewportWidget = widget
       imi.pushViewport(Rectangle(bounds.x+border,
                                  bounds.y+border,
-                                 bounds.width-2*border,
+                                 bounds.width-2*border-barSize,
                                  bounds.height-2*border-barSize))
     end)
+
+  table.insert(imi.containersStack, {widget=oldViewportWidget, scrollableBounds=imi.scrollableBounds})
 
   imi.pushLayout()
   imi.cursor = imi.viewport.origin - imi.widgets[id].scrollPos
@@ -865,7 +916,6 @@ end
 function imi.endViewport()
   local widget = imi.viewportWidget
   local bounds = widget.bounds
-  local hover = widget.hoverHBar
   local subDrawList = imi.drawList
 
   imi.popViewport()
@@ -874,50 +924,74 @@ function imi.endViewport()
   local border = 4*imi.uiScale -- TODO access theme styles
   local barSize = app.theme.dimension.mini_scrollbar_size
   widget.scrollableSize = imi.scrollableBounds.size
-  widget.viewportSize = Size(bounds.width-border,
+  widget.viewportSize = Size(bounds.width-barSize-border-1*imi.uiScale,
                              bounds.height-barSize-border-1*imi.uiScale)
 
-  addDrawListFunction(
-    function()
-      local bounds = widget.bounds
-      imi.ctx:drawThemeRect('sunken_normal', bounds)
+  addDrawListFunction(function (ctx)
+    ctx:drawThemeRect('sunken_normal', bounds)
+  end)
+  -- Draw sub items (using the current widget.bounds)
+  table.insert(imi.drawList, { type="save" })
 
-      local bgPart, thumbPart
-      if hover then
-        bgPart = 'mini_scrollbar_bg_hot'
-        thumbPart = 'mini_scrollbar_thumb_hot'
-      else
-        bgPart = 'mini_scrollbar_bg'
-        thumbPart = 'mini_scrollbar_thumb'
-      end
+  -- TODO: We need to fix this. I had to use the addDrawListFunction here instead of inserting a
+  -- "clip" cmd to imi.drawList because the bounds "upvalue" is recalculated after an endGroup
+  -- call, so I needed to "defer" the bounds retrieval. If I don't do this, the clip is not
+  -- positioned right and therefore the viewport content is not displayed.
+  addDrawListFunction(function(ctx)
+    ctx:beginPath()
+    ctx:rect(Rectangle(bounds.x+border,
+                        bounds.y+border,
+                        bounds.width-2*border,
+                        bounds.height-2*border))
+    ctx:clip()
+  end)
 
-      local info = getScrollInfo(widget)
+  for _,cmd in ipairs(subDrawList) do
+    table.insert(imi.drawList, cmd)
+  end
+  table.insert(imi.drawList, { type="restore" })
 
-      imi.ctx:drawThemeRect(bgPart,
-                            bounds.x+border,
-                            bounds.y+bounds.height-barSize-border-1*imi.uiScale,
-                            bounds.width-2*border+1*imi.uiScale,
-                            barSize+1*imi.uiScale)
-      imi.ctx:drawThemeRect(thumbPart,
-                            bounds.x+border+info.pos,
-                            bounds.y+bounds.height-barSize-border-1*imi.uiScale,
-                            info.len, barSize)
+  local function getParts(hover)
+    local bgPart, thumbPart
+    if hover and not (widget.hoverVBar and widget.hoverHBar) then
+      bgPart = 'mini_scrollbar_bg_hot'
+      thumbPart = 'mini_scrollbar_thumb_hot'
+    else
+      bgPart = 'mini_scrollbar_bg'
+      thumbPart = 'mini_scrollbar_thumb'
+    end
+    return bgPart, thumbPart
+  end
 
-      -- Draw sub items (using the current widget.bounds)
-      table.insert(imi.drawList, { type="save" })
-      table.insert(imi.drawList, { type="clip",
-                                   bounds=Rectangle(bounds.x+border,
-                                                    bounds.y+border,
-                                                    bounds.width-2*border,
-                                                    bounds.height-2*border) })
-      for i,cmd in ipairs(subDrawList) do
-        table.insert(imi.drawList, cmd)
-      end
-      table.insert(imi.drawList, { type="restore" })
-    end)
+  addDrawListFunction(function (ctx)
+    local bgPart, thumbPart = getParts(widget.hoverHBar)
+    local info = getHScrollInfo(widget)
+    ctx:drawThemeRect(bgPart,
+                      bounds.x+border,
+                      bounds.y+bounds.height-barSize-border-1*imi.uiScale,
+                      bounds.width-2*border-barSize,
+                      barSize+1*imi.uiScale)
+    ctx:drawThemeRect(thumbPart,
+                      bounds.x+border+info.pos,
+                      bounds.y+bounds.height-barSize-border-1*imi.uiScale,
+                      info.len, barSize)
 
-  imi.viewportWidget = nil
-  imi.scrollableBounds = nil
+    bgPart, thumbPart = getParts(widget.hoverVBar)
+    info = getVScrollInfo(widget)
+    ctx:drawThemeRect(bgPart,
+                      bounds.x+bounds.width-barSize-border-1*imi.uiScale,
+                      bounds.y+border,
+                      barSize+1*imi.uiScale,
+                      bounds.height-2*border-barSize)
+    ctx:drawThemeRect(thumbPart,
+                      bounds.x+bounds.width-barSize-border-1*imi.uiScale,
+                      bounds.y+border+info.pos,
+                      barSize, info.len)
+  end)
+
+  local container = table.remove(imi.containersStack)
+  imi.viewportWidget = container.widget
+  imi.scrollableBounds = container.scrollableBounds
 end
 
 ----------------------------------------------------------------------

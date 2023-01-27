@@ -619,6 +619,7 @@ local function editTile()
         end
 
         local editTilePopup = Dialog{ title="Edit Tile", onclose=cancel }
+        editTilePopup:label{ text="When finish press OK" }
         local tileShrunkenBounds = calculate_shrunken_bounds_from_tileset(ts)
         local tileSize = ts.grid.tileSize
         tempSprite = Sprite(tileSize.width, tileSize.height)

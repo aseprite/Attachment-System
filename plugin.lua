@@ -1076,9 +1076,13 @@ local function imi_ongui()
       -- Folders
 
       imi.rowHeight = 0
+
+
+      -- TODO: Replace the 10 used here by the corresponding viewport border height+dialog bottom border height.
       imi.pushViewport(Rectangle(imi.cursor.x, imi.cursor.y,
                                  imi.viewport.width - imi.cursor.x,
-                                 imi.viewport.height - imi.cursor.y))
+                                 imi.viewport.height - imi.cursor.y-(10+app.theme.dimension.mini_scrollbar_size)*imi.uiScale))
+      imi.beginViewport(Size(imi.viewport.width, imi.viewport.height), 100)
 
       for i,folder in ipairs(folders) do
         imi.pushID(i .. folder.name)
@@ -1165,6 +1169,7 @@ local function imi_ongui()
         imi.popID()
       end
 
+      imi.endViewport()
       imi.popViewport()
     end
   end

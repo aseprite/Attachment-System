@@ -537,6 +537,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           table.insert(tileBoundsOnSprite, tempSprite.cels[1].image.bounds)
           addTempLayers(tempSprite, tileBounds)
           app.command.FitScreen{}
+          app.refresh()
         elseif #tileBoundsOnSprite >= 1 then
           local tileBounds = tileBoundsOnSprite[1]
           instanceOn = "sprite"
@@ -646,6 +647,7 @@ local function editTile()
                                          editTilePopup.bounds.height)
         popup:close()
         dlg.bounds = Rectangle(0, 0, 1, 1)
+        app.refresh()
       end)
   end
 

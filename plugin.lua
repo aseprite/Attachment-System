@@ -23,8 +23,17 @@
 --   },
 -- }
 --
+-- Tile 1st approach (used on git branch: issue-18-1)
 -- Tile = {
 --   pivot=Point(0, 0),
+-- }
+-- Tile 2nd approach (used on git branch: issue-18-2)
+-- Tile = {
+--   referencePoint=Point(0, 0),
+--   anchors={ { name="name 1", position=Point(0, 0)},
+--             { name="name 2", position=Point(0, 0)},
+--              ... }
+--   },
 -- }
 ----------------------------------------------------------------------
 
@@ -49,6 +58,32 @@ local activeTileImageInfo = {} -- Used to re-calculate info when the tile image 
 local showTilesID = false
 local showTilesUsage = false
 local zoom = 1.0
+local anchorPopup -- dialog for Add/Remove anchor points
+local anchorChecksEntriesPopup = nil -- dialog por Checks and Entry widgets for anchor points
+local tempLayers = {}  -- vector of temporary layers where anchor point are drawn
+local anchorCrossImage  -- crosshair to anchor points -full opacity-
+local anchorCrossImageT -- crosshair to anchor points -with transparency-
+local tempLayersLock = false -- tempLayers cannot be modified during App_sitechange
+
+if anchorCrossImage == nil then
+  anchorCrossImage = Image(3, 3)
+  anchorCrossImage:drawPixel(1, 0, Color(0,0,0))
+  anchorCrossImage:drawPixel(0, 1, Color(0,0,0))
+  anchorCrossImage:drawPixel(2, 1, Color(0,0,0))
+  anchorCrossImage:drawPixel(1, 2, Color(0,0,0))
+  anchorCrossImage:drawPixel(1, 1, Color(255,0,0))
+end
+
+if anchorCrossImageT == nil then
+  anchorCrossImageT = Image(3, 3)
+  local opacity = 128
+  anchorCrossImageT:drawPixel(1, 0, Color(0,0,0, opacity))
+  anchorCrossImageT:drawPixel(0, 1, Color(0,0,0, opacity))
+  anchorCrossImageT:drawPixel(2, 1, Color(0,0,0, opacity))
+  anchorCrossImageT:drawPixel(1, 2, Color(0,0,0, opacity))
+  anchorCrossImageT:drawPixel(1, 1, Color(255,0,0, opacity))
+end
+
 
 local function contains(t, item)
   for _,v in pairs(t) do
@@ -79,6 +114,16 @@ local function calculate_shrunken_bounds(tilemapLayer)
   local ntiles = #ts
   for i = 0,ntiles-1 do
     local tileImg = ts:getTile(i)
+    bounds = bounds:union(tileImg:shrinkBounds())
+  end
+  return bounds
+end
+
+local function calculate_shrunken_bounds_from_tileset(tileset)
+  local bounds = Rectangle()
+  local ntiles = #tileset
+  for i = 0,ntiles-1 do
+    local tileImg = tileset:getTile(i)
     bounds = bounds:union(tileImg:shrinkBounds())
   end
   return bounds
@@ -262,6 +307,347 @@ end
 local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   local popup = Dialog{ parent=imi.dlg }
   local spr = activeLayer.sprite
+  anchorChecksEntriesPopup = Dialog{ title="Anchors List" }
+
+  local function find_tiles_on_sprite()
+    if not(activeLayer.isTilemap) then
+      app.alert("Error: active Layer isn't Tilemap or Cel is empty.")
+      return nil
+    elseif app.activeCel == nil then
+      return {}
+    end
+    local cel = app.activeCel
+    local tileSize = ts.grid.tileSize
+    local tileBoundsOnSprite = {}
+    for y=0, spr.bounds.height, 1 do
+      for x=0, spr.bounds.width, 1 do
+        if ti == cel.image:getPixel(x, y) then
+          table.insert(tileBoundsOnSprite, Rectangle(cel.position.x + x*tileSize.width,
+                                            cel.position.y + y*tileSize.height,
+                                            tileSize.width, tileSize.height))
+        end
+      end
+    end
+    return tileBoundsOnSprite
+  end
+
+  -- Variables and Functions associated to editAnchors() and editTile()
+
+  local instanceOn -- "sprite" / "new_sprite" / "multiple_tile_instances"
+  local originalLayer = activeLayer
+  local originalCanvasBounds
+  local tempSprite
+  local layerEditableStates = {}
+
+  local function lockLayers()
+    for i=1,#spr.layers, 1 do
+      table.insert(layerEditableStates, { editable=spr.layers[i].isEditable,
+                                          opacity=spr.layers[i].opacity })
+      if spr.layers[i] ~= originalLayer then
+        spr.layers[i].opacity = 64
+      end
+      spr.layers[i].isEditable = false
+    end
+  end
+
+  local function unlockLayers()
+    for i=1,#layerEditableStates, 1 do
+      spr.layers[i].isEditable = layerEditableStates[i].editable
+      spr.layers[i].opacity = layerEditableStates[i].opacity
+    end
+  end
+
+  local function editAnchors()
+    app.transaction(
+      function()
+        instanceOn = "new_sprite" -- "sprite" / "new_sprite" / "multiple_tile_instances"
+        originalCanvasBounds = dlg.bounds
+        tempLayers = {}
+        layerEditableStates = {}
+        oldAnchors = {}
+        local originalTool = app.activeTool.id
+
+        local function cancel()
+          anchorChecksEntriesPopup:close()
+          tempLayersLock = true
+          for i=1, #tempLayers, 1 do
+            app.activeSprite:deleteLayer(tempLayers[i])
+          end
+          if tempSprite ~= nil then
+            tempSprite:close()
+          end
+          app.command.AdvancedMode{}
+          unlockLayers()
+          dlg.bounds = originalCanvasBounds
+          app.activeLayer = originalLayer
+          app.activeTool = originalTool
+          tempLayersLock = false
+        end
+
+        anchorPopup = Dialog{ title="Anchor Points", onclose=cancel}
+
+        local function addTempLayers(sprite, tileBounds)
+          anchors = ts:tile(ti).properties(PK).anchors
+          if anchors ~= nil then
+            -- make all the anchors point in separate layers
+            for i=1, #anchors, 1 do
+              table.insert(tempLayers, sprite:newLayer())
+              local anchorPos = anchors[i].position
+              local pos = anchorPos + tileBounds.origin- Point(anchorCrossImage.width / 2, anchorCrossImage.height / 2)
+              sprite:newCel(tempLayers[i], app.activeFrame, anchorCrossImage, pos)
+              tempLayers[i].name = "anchor_" .. i
+            end
+          end
+        end
+
+        local function refreshTempLayers()
+          tempLayersLock = true
+          for i=1, #tempLayers, 1 do
+            local key_number = string.match(tempLayers[i].name, "%d")
+            local c_key = "c_" .. key_number
+            if anchorChecksEntriesPopup.data[c_key] then
+              tempLayers[i].cels[1].image = anchorCrossImage
+            else
+              tempLayers[i].cels[1].image = anchorCrossImageT
+            end
+          end
+          app.refresh()
+          tempLayersLock = false
+        end
+
+        local function regenerateAnchorChecksEntriesPopup()
+          tempLayersLock = true
+          local checkEntryPairs = {}
+          for i=1, #tempLayers, 1 do
+            local key_number = string.match(tempLayers[i].name, "%d")
+            local c_key = "c_" .. key_number
+            local e_key = "e_" .. key_number
+            table.insert(checkEntryPairs, {c=anchorChecksEntriesPopup.data[c_key],
+                                           e=anchorChecksEntriesPopup.data[e_key]} )
+            tempLayers[i].name = "anchor_" .. i
+           end
+          anchorChecksEntriesPopup:close()
+          anchorChecksEntriesPopup = Dialog()
+          if #checkEntryPairs >=1 then
+            for i=1, #tempLayers, 1 do
+              anchorChecksEntriesPopup:check{ id="c_" .. i,
+                                              selected=checkEntryPairs[i].c,
+                                              onclick=refreshTempLayers }
+              anchorChecksEntriesPopup:entry{ id="e_" .. i, text=checkEntryPairs[i].e }
+              if checkEntryPairs[i].c then
+                tempLayers[i].cels[1].image = anchorCrossImage
+              else
+                tempLayers[i].cels[1].image = anchorCrossImageT
+              end
+            end
+            anchorChecksEntriesPopup:show{ wait=false }
+            anchorChecksEntriesPopup.bounds = Rectangle(anchorPopup.bounds.x,
+                                                        85*imi.uiScale,
+                                                        200*imi.uiScale,
+                                                        anchorChecksEntriesPopup.bounds.height)
+          end
+          app.refresh()
+          tempLayersLock = false
+        end
+
+        local function removeAnchorPoint(sprite)
+          tempLayersLock = true
+          local new_tempLayers = {}
+          local layers_to_delete = {}
+          local tempLayersCopy = {}
+          for i=1, #tempLayers, 1 do
+            local key = "c_" .. i
+            table.insert(tempLayersCopy, tempLayers[i])
+            if anchorChecksEntriesPopup.data[key] then
+              table.insert(layers_to_delete, i)
+            else
+              table.insert(new_tempLayers, i)
+            end
+          end
+          for i=1, #layers_to_delete, 1 do
+            sprite:deleteLayer(tempLayers[layers_to_delete[i]])
+          end
+          tempLayers = {}
+          for i=1, #new_tempLayers, 1 do
+            table.insert(tempLayers, tempLayersCopy[new_tempLayers[i]])
+          end
+          tempLayersLock = false
+          regenerateAnchorChecksEntriesPopup()
+        end
+
+        local function addAnchorPoint(sprite, tileBounds)
+          tempLayersLock = true
+          local new_layer = sprite:newLayer()
+          local layer_number
+          if #tempLayers >= 1 then
+            layer_number = string.match(tempLayers[#tempLayers].name, "%d") + 1
+          else
+            layer_number = 1
+          end
+          new_layer.name = "anchor_" .. layer_number
+          table.insert(tempLayers, new_layer)
+          local anchorPos = Point(tileBounds.width/2, tileBounds.height/2)
+          local pos = anchorPos + tileBounds.origin - Point(anchorCrossImage.width / 2, anchorCrossImage.height / 2)
+          sprite:newCel(tempLayers[#tempLayers], app.activeFrame, anchorCrossImage, pos)
+          tempLayersLock = false
+          regenerateAnchorChecksEntriesPopup()
+        end
+
+        local function turnToeditAnchorsView()
+          local temp = app.preferences.advanced_mode.show_alert
+          app.preferences.advanced_mode.show_alert = false
+          app.command.AdvancedMode{}
+          app.command.AdvancedMode{}
+          app.preferences.advanced_mode.show_alert = temp
+          dlg.bounds = Rectangle(0, 0, 1, 1)
+          app.activeTool = "move"
+        end
+
+        local function fillEntries()
+          local anchors = ts:tile(ti).properties(PK).anchors
+          for i=1, #tempLayers - 1, 1 do
+            local key_number = string.match(tempLayers[i].name, "%d")
+            local e_key = "e_" .. key_number
+            local c_key = "c_" .. key_number
+            anchorChecksEntriesPopup:modify { id=e_key,
+                                              text=anchors[i].name }
+            anchorChecksEntriesPopup:modify { id=c_key,
+                                              selected=false }
+            tempLayers[i].cels[1].image = anchorCrossImageT
+          end
+          if #tempLayers >=1 then
+            anchorChecksEntriesPopup:modify { id="e_" .. #tempLayers,
+                                              text=anchors[#tempLayers].name }
+            anchorChecksEntriesPopup:modify { id="c_" .. #tempLayers,
+                                              selected=true }
+            tempLayers[#tempLayers].cels[1].image = anchorCrossImage
+          end
+          app.refresh()
+        end
+
+        local tileBoundsOnSprite = find_tiles_on_sprite()
+        if tileBoundsOnSprite == nil then
+          return
+        elseif #tileBoundsOnSprite == 0 then
+          instanceOn = "new_sprite"
+          local gridSize = ts.grid.tileSize
+          local tileBounds = Rectangle(0, 0, gridSize.width, gridSize.height )
+          tempSprite = Sprite(tileBounds.width, tileBounds.height)
+          tempSprite.cels[1].image = ts:tile(ti).image
+          table.insert(tileBoundsOnSprite, tempSprite.cels[1].image.bounds)
+          addTempLayers(tempSprite, tileBounds)
+          app.command.FitScreen{}
+        elseif #tileBoundsOnSprite >= 1 then
+          local tileBounds = tileBoundsOnSprite[1]
+          instanceOn = "sprite"
+          lockLayers()
+          addTempLayers(spr, tileBounds)
+        --else -- multiple tileBoundsOnSprite
+          --TODO: include in the New Anchor Poin dialog an instance selector
+          -- instanceOn = "multiple_tile_instances"
+        end
+        turnToeditAnchorsView()
+
+        local function backToSprite()
+          anchorPopup:close()
+        end
+
+        local function acceptPoints()
+          local tileProperty = originalLayer.tileset:tile(ti).properties(PK)
+          local tileBounds = tileBoundsOnSprite[1]
+          tileProperty.anchors = {}
+
+          local tempAnchors = {}
+          for i=1, #tempLayers, 1 do
+            local e_key = "e_" .. i
+            local nameValue = anchorChecksEntriesPopup.data[e_key]
+            local posValue = tempLayers[i].cels[1].position - tileBounds.origin + 
+                             Point(anchorCrossImage.width / 2, anchorCrossImage.height / 2)
+            -- table.insert(tileProperty.anchors, { name = nameValue, position = posValue })
+            table.insert(tempAnchors, { name = nameValue, position = posValue })
+          end
+          tileProperty.anchors = tempAnchors
+          backToSprite()
+        end
+
+        anchorPopup:button{ text="Add Anchor", onclick= function()
+                                                          if instanceOn == "new_sprite" then
+                                                            addAnchorPoint(tempSprite, tileBoundsOnSprite[1])
+                                                          else
+                                                            addAnchorPoint(spr, tileBoundsOnSprite[1])
+                                                          end
+                                                        end }
+        anchorPopup:button{ text="Remove Anchor", onclick=function()
+                                                            if instanceOn == "new_sprite" then
+                                                              removeAnchorPoint(tempSprite)
+                                                            else
+                                                              removeAnchorPoint(spr)
+                                                            end
+                                                          end }
+        anchorPopup:newrow()
+        anchorPopup:button{ text="Cancel", onclick=function() anchorPopup:close() end }
+        anchorPopup:button{ text="OK", onclick=acceptPoints }:newrow()
+        anchorPopup:label{ text="To move anchors:"}:newrow()
+        anchorPopup:label{ text="Hold CTRL, click and move" }
+        regenerateAnchorChecksEntriesPopup()
+        fillEntries()
+        anchorPopup:show{
+          wait=false,
+          bounds=Rectangle(0, 0, 200*imi.uiScale, 85*imi.uiScale)
+        }
+        popup:close()
+        dlg.bounds = Rectangle(0, 0, 1, 1)
+      end)
+  end
+
+
+local function editTile()
+    app.transaction(
+      function()
+        instanceOn = "new_sprite" -- "sprite" / "new_sprite" / "multiple_tile_instances"
+        originalLayer = activeLayer
+        originalCanvasBounds = dlg.bounds
+        layerEditableStates = {}
+        local originalLayersOpacity = {}
+
+        local function cancel()
+          if tempSprite ~= nil then
+            tempSprite:close()
+          end
+          dlg.bounds = originalCanvasBounds
+        end
+
+        local editTilePopup = Dialog{ title="Edit Tile", onclose=cancel }
+        local tileShrunkenBounds = calculate_shrunken_bounds_from_tileset(ts)
+        local tileSize = ts.grid.tileSize
+        tempSprite = Sprite(tileSize.width, tileSize.height)
+        local palette = spr.palettes[1]
+        tempSprite.palettes[1]:resize(#palette)
+        for i=0, #palette-1, 1 do
+          tempSprite.palettes[1]:setColor(i, palette:getColor(i))
+        end
+        tempSprite.cels[1].image = ts:tile(ti).image
+
+        local function accept()
+          if tempSprite ~= nil then
+            local image = Image(ts:tile(ti).image.width, ts:tile(ti).image.height)
+            image:drawImage(app.activeCel.image, app.activeCel.position)
+            ts:tile(ti).image = image
+          end
+          editTilePopup:close()
+        end
+
+        editTilePopup:button{ text="Cancel", onclick=function() editTilePopup:close() end }
+        editTilePopup:button{ text="OK", onclick=accept }:newrow()
+        editTilePopup:show{ wait=false }
+        editTilePopup.bounds = Rectangle(120*imi.uiScale,
+                                         60*imi.uiScale,
+                                         editTilePopup.bounds.width,
+                                         editTilePopup.bounds.height)
+        popup:close()
+        dlg.bounds = Rectangle(0, 0, 1, 1)
+      end)
+  end
 
   function forEachCategoryTileset(func)
     for i,categoryID in ipairs(activeLayer.properties(PK).categories) do
@@ -329,6 +715,9 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     popup:close()
   end
 
+  popup:menuItem{ text="Edit Anchors", onclick=editAnchors }:newrow()
+  popup:menuItem{ text="Edit Tile", onclick=editTile }:newrow()
+  popup:separator():newrow()
   popup:menuItem{ text="New Empty", onclick=newEmpty }:newrow()
   popup:menuItem{ text="Duplicate", onclick=duplicate }:newrow()
   if folder and not is_base_set_folder(folder) then
@@ -894,9 +1283,39 @@ local function observe_sprite(spr)
   end
 end
 
+local function updateAnchorDialog()
+  if #tempLayers >= 1 and not(tempLayersLock) then
+    local selectedLayer = app.activeLayer
+    for i=1, #tempLayers, 1 do
+      if tempLayers[i] == selectedLayer then
+        local layerIndex = string.match(selectedLayer.name, "%d")
+        if layerIndex == nil then
+          break
+        end
+        layerIndex = tonumber(layerIndex)
+        for i=1, #tempLayers, 1 do
+          if anchorChecksEntriesPopup.data["c_" .. i] ~= nil then
+            if i==layerIndex then
+                anchorChecksEntriesPopup:modify { id="c_" .. i, selected=true }
+                tempLayers[i].cels[1].image = anchorCrossImage
+            else
+                anchorChecksEntriesPopup:modify { id="c_" .. i, selected=false }
+                tempLayers[i].cels[1].image = anchorCrossImageT
+            end
+          end
+        end
+        app.refresh()
+        break
+      end
+    end
+  end
+end
+
 -- When the active site (active sprite, cel, frame, etc.) changes this
 -- function will be called.
 local function App_sitechange(ev)
+  updateAnchorDialog()
+
   local newSpr = app.activeSprite
   if newSpr ~= observedSprite then
     observe_sprite(newSpr)

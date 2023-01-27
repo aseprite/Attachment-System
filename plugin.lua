@@ -747,8 +747,8 @@ local function create_tile_view(folders, folder, index, ts, ti, inRc, outSize)
 
   if showTilesID then
     imi.alignFunc = function(cursor, size, lastBounds)
-      return Point(lastBounds.x,
-                   lastBounds.y+lastBounds.height-size.height)
+      return Point(lastBounds.x+2,
+                   lastBounds.y+lastBounds.height-size.height-2)
     end
     imi.label(string.format("[%d]", ti))
     imi.widget.color = Color(255, 255, 0)
@@ -762,10 +762,21 @@ local function create_tile_view(folders, folder, index, ts, ti, inRc, outSize)
       label = tostring(tilesHistogram[ti])
     end
     imi.alignFunc = function(cursor, size, lastBounds)
-      return lastBounds.origin
+      return Point(lastBounds.x+2,
+                   lastBounds.y+2)
     end
     imi.label(label)
     imi.widget.color = Color(255, 255, 0)
+    imi.alignFunc = nil
+  end
+
+  if ts:tile(ti).properties(PK).referencePoint == nil then
+    imi.alignFunc = function(cursor, size, lastBounds)
+      return Point(lastBounds.x+lastBounds.width-size.width-2,
+                   lastBounds.y+2)
+    end
+    imi.label("R")
+    imi.widget.color = Color(255, 0, 0)
     imi.alignFunc = nil
   end
 

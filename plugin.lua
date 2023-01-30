@@ -717,11 +717,28 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     popup:close()
   end
 
+  local function findOnTimeline()
+    local frames = {}
+    for _,cel in ipairs(activeLayer.cels) do
+      if cel.image then
+        local celTi = cel.image:getPixel(0, 0)
+        if celTi == ti then
+          table.insert(frames, cel.frameNumber)
+        end
+      end
+    end
+    if #frames > 0 then
+      app.range.frames = frames
+    end
+  end
+
   popup:menuItem{ text="Edit Anchors", onclick=editAnchors }:newrow()
   popup:menuItem{ text="Edit Tile", onclick=editTile }:newrow()
   popup:separator():newrow()
   popup:menuItem{ text="New Empty", onclick=newEmpty }:newrow()
   popup:menuItem{ text="Duplicate", onclick=duplicate }:newrow()
+  popup:separator()
+  popup:menuItem{ text="Find on timeline", onclick=findOnTimeline }:newrow()
   popup:separator()
   popup:menuItem{ text="Delete", onclick=delete }
   popup:showMenu()

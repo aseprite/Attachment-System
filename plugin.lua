@@ -562,7 +562,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           for i=1, #tempLayers, 1 do
             local e_key = "e_" .. i
             local nameValue = anchorChecksEntriesPopup.data[e_key]
-            local posValue = tempLayers[i].cels[1].position - tileBounds.origin + 
+            local posValue = tempLayers[i].cels[1].position - tileBounds.origin +
                              Point(anchorCrossImage.width / 2, anchorCrossImage.height / 2)
             -- table.insert(tileProperty.anchors, { name = nameValue, position = posValue })
             table.insert(tempAnchors, { name = nameValue, position = posValue })
@@ -601,8 +601,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
       end)
   end
 
-
-local function editTile()
+  local function editTile()
     app.transaction(
       function()
         instanceOn = "new_sprite" -- "sprite" / "new_sprite" / "multiple_tile_instances"
@@ -652,14 +651,14 @@ local function editTile()
       end)
   end
 
-  function forEachCategoryTileset(func)
+  local function forEachCategoryTileset(func)
     for i,categoryID in ipairs(activeLayer.properties(PK).categories) do
       local catTileset = find_tileset_by_categoryID(spr, categoryID)
       func(catTileset)
     end
   end
 
-  function addInFolderAndBaseSet(ti)
+  local function addInFolderAndBaseSet(ti)
     if folder then
       table.insert(folder.items, ti)
     end
@@ -671,7 +670,7 @@ local function editTile()
     activeLayer.properties(PK).folders = folders
   end
 
-  function newEmpty()
+  local function newEmpty()
     app.transaction("New Empty Attachment",
       function()
         local tile
@@ -692,7 +691,7 @@ local function editTile()
     popup:close()
   end
 
-  function duplicate()
+  local function duplicate()
     local origTile = ts:tile(ti)
     app.transaction("Duplicate Attachment",
       function()
@@ -710,7 +709,7 @@ local function editTile()
     popup:close()
   end
 
-  function delete()
+  local function delete()
     table.remove(folder.items, indexInFolder)
     app.transaction("Delete Folder", function()
      activeLayer.properties(PK).folders = folders

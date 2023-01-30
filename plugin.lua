@@ -1094,7 +1094,7 @@ local function imi_ongui()
       imi.pushViewport(Rectangle(imi.cursor.x, imi.cursor.y,
                                  imi.viewport.width - imi.cursor.x,
                                  imi.viewport.height - imi.cursor.y-(10+app.theme.dimension.mini_scrollbar_size)*imi.uiScale))
-      imi.beginViewport(Size(imi.viewport.width, imi.viewport.height), 100)
+      imi.beginViewport(Size(imi.viewport.width, imi.viewport.height))
 
       for i,folder in ipairs(folders) do
         imi.pushID(i .. folder.name)

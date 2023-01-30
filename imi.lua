@@ -728,15 +728,19 @@ function imi.popViewport()
 end
 
 -- Creates a scrollable viewport.
+-- If itemSize is nil, the viewport cannot be resized.
 --
 -- Fields:
 --   widget.resizedViewport = Size(numberOfColumns, numberOfRows)
+--
+-- Events:
+--   widget.onviewportresized = function(resizedViewport)
 function imi.beginViewport(size, itemSize)
   local id = imi.getID()
   local widget = updateWidget(id, { })
   local oldViewportWidget = imi.viewportWidget
 
-  if widget.resizedViewport then
+  if itemSize and widget.resizedViewport then
     size = Size(widget.resizedViewport.width * itemSize.width,
                 widget.resizedViewport.height * itemSize.height)
   end
@@ -749,7 +753,7 @@ function imi.beginViewport(size, itemSize)
   local function onmousemove(widget)
     local bounds = widget.bounds
 
-    if widget.draggingResize then
+    if itemSize and widget.draggingResize then
       local oldResizedViewport = widget.resizedViewport
 
       widget.resizedViewport = Size(
@@ -817,6 +821,7 @@ function imi.beginViewport(size, itemSize)
 
       local oldHoverResize = widget.hoverResize
       widget.hoverResize =
+        (itemSize ~= nil) and
         widget.hoverHBar and
         widget.hoverVBar
       if widget.hoverResize then

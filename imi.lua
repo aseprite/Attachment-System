@@ -211,7 +211,7 @@ end
 
 local function pointInsideWidgetHierarchy(widget, pos)
   while widget.bounds and
-        widget.bounds:contains(imi.mousePos) do
+        widget.bounds:contains(pos) do
     if widget.parent then
       widget = widget.parent
     else

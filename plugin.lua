@@ -195,6 +195,16 @@ local function get_active_tile_image()
   return nil
 end
 
+local function get_active_tile_index()
+  if activeLayer and activeLayer.isTilemap then
+    local cel = activeLayer:cel(app.activeFrame)
+    if cel and cel.image then
+      return cel.image:getPixel(0, 0)
+    end
+  end
+  return nil
+end
+
 local function create_base_set_folder(layer)
   local items = {}
   for i=1,#layer.tileset-1 do
@@ -302,6 +312,48 @@ local function setup_sprite(spr)
     end
   end
   setup_layers(spr.layers)
+end
+
+local MODE_FORWARD = 0;
+local MODE_BACKWARDS = 1;
+-- Activates the next cel in the active layer where the selected attachment is used.
+local function find_next_attachment_usage(ti, mode)
+  if not app.activeCel then return end
+
+  local iniFrame = app.activeCel.frameNumber
+  local prevMatch = nil
+  local istart = 1
+  local iend = #activeLayer.cels
+  local istep = 1
+  local isPrevious = function(frameNum) return frameNum <= iniFrame end
+  if mode == MODE_BACKWARDS then
+    istart = #activeLayer.cels
+    iend = 1
+    istep = -1
+    isPrevious = function(frameNum) return frameNum >= iniFrame end
+  end
+  local cels = activeLayer.cels
+  local cel
+  for i=istart,iend,istep do
+    cel = cels[i]
+    if isPrevious(cel.frameNumber) and prevMatch then goto continue end
+
+    if cel.image then
+      local celTi = cel.image:getPixel(0, 0)
+      if celTi == ti then
+        if isPrevious(cel.frameNumber) then
+          prevMatch = cel
+        else
+          app.activeCel = cel
+          return
+        end
+      end
+    end
+    ::continue::
+  end
+  if prevMatch then
+    app.activeCel = prevMatch
+  end
 end
 
 local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
@@ -717,11 +769,31 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     popup:close()
   end
 
+  -- Select all the active layers' frames where the selected attachment is used.
+  local function selectFrames()
+    local frames = {}
+    for _,cel in ipairs(activeLayer.cels) do
+      if cel.image then
+        local celTi = cel.image:getPixel(0, 0)
+        if celTi == ti then
+          table.insert(frames, cel.frameNumber)
+        end
+      end
+    end
+    if #frames > 0 then
+      app.range.frames = frames
+    end
+  end
+
   popup:menuItem{ text="Edit Anchors", onclick=editAnchors }:newrow()
   popup:menuItem{ text="Edit Tile", onclick=editTile }:newrow()
   popup:separator():newrow()
   popup:menuItem{ text="New Empty", onclick=newEmpty }:newrow()
   popup:menuItem{ text="Duplicate", onclick=duplicate }:newrow()
+  popup:separator()
+  popup:menuItem{ text="Select usage", onclick=selectFrames }:newrow()
+  popup:menuItem{ text="Find next usage", onclick=function() find_next_attachment_usage(ti, MODE_FORWARD) end }:newrow()
+  popup:menuItem{ text="Find prev usage", onclick=function() find_next_attachment_usage(ti, MODE_BACKWARDS) end }:newrow()
   popup:separator()
   popup:menuItem{ text="Delete", onclick=delete }
   popup:showMenu()
@@ -1397,12 +1469,35 @@ local function AttachmentWindow_SwitchWindow()
   end
 end
 
+local function AttachmentSystem_FindNext(mode)
+  return function()
+    local ti = get_active_tile_index()
+    if ti then
+      find_next_attachment_usage(ti, mode)
+    end
+  end
+end
+
 function init(plugin)
   plugin:newCommand{
     id="AttachmentSystem_SwitchWindow",
     title="Attachment System: Switch Window",
     group="view_new",
     onclick=AttachmentWindow_SwitchWindow
+  }
+
+  plugin:newCommand{
+    id="AttachmentSystem_NextAttachmentUsage",
+    title="Attachment System: Find next attachment usage",
+    group="view_new",
+    onclick=AttachmentSystem_FindNext(MODE_FORWARD)
+  }
+
+  plugin:newCommand{
+    id="AttachmentSystem_PrevAttachmentUsage",
+    title="Attachment System: Find previous attachment usage",
+    group="view_new",
+    onclick=AttachmentSystem_FindNext(MODE_BACKWARDS)
   }
 
   showTilesID = plugin.preferences.showTilesID

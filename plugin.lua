@@ -1303,10 +1303,8 @@ local function canvas_onwheel(ev)
         else
           dx = 64*dx
         end
-        widget.scrollPos.x = widget.scrollPos.x + dx
-        if widget.scrollPos.x < 0 then
-          widget.scrollPos.x = 0
-        end
+        widget.setScrollPos(Point(widget.scrollPos.x + dx,
+                                  widget.scrollPos.y))
         dlg:repaint()
       end
     end

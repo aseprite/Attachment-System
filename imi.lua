@@ -750,6 +750,17 @@ function imi.beginViewport(size, itemSize)
   size.width = size.width + 2*border + barSize
   size.height = size.height + 2*border + barSize
 
+  function widget.setScrollPos(pos)
+    local maxScrollPos = widget.scrollableSize - widget.viewportSize
+    pos.x = imi.clamp(pos.x, 0, maxScrollPos.width)
+    pos.y = imi.clamp(pos.y, 0, maxScrollPos.height)
+
+    if widget.scrollPos ~= pos then
+      widget.scrollPos = pos
+      imi.dlg:repaint()
+    end
+  end
+
   local function onmousemove(widget)
     local bounds = widget.bounds
 
@@ -768,39 +779,31 @@ function imi.beginViewport(size, itemSize)
       imi.mouseCursor = MouseCursor.SE_RESIZE
     elseif widget.draggingHBar then
       local maxScrollPos = widget.scrollableSize - widget.viewportSize
-      local oldScrollPos = Point(widget.scrollPos)
+      local scrollPos = Point(widget.scrollPos)
 
       if widget.hoverHBar then
         local info = getHScrollInfo(widget)
         local pos = dragStartScrollBarPos + (imi.mousePos - dragStartMousePos)
         pos.x = imi.clamp(pos.x, 0, info.fullLen - info.len)
-        widget.scrollPos.x = maxScrollPos.width * pos.x / (info.fullLen - info.len)
+        scrollPos.x = maxScrollPos.width * pos.x / (info.fullLen - info.len)
       else
-        widget.scrollPos = dragStartScrollPos + (dragStartMousePos - imi.mousePos)
+        scrollPos = dragStartScrollPos + (dragStartMousePos - imi.mousePos)
       end
-      widget.scrollPos.x = imi.clamp(widget.scrollPos.x, 0, maxScrollPos.width)
-
-      if oldScrollPos ~= widget.scrollPos then
-        imi.dlg:repaint()
-      end
+      widget.setScrollPos(scrollPos)
       imi.mouseCursor = MouseCursor.GRABBING
     elseif widget.draggingVBar then
       local maxScrollPos = widget.scrollableSize - widget.viewportSize
-      local oldScrollPos = Point(widget.scrollPos)
+      local scrollPos = Point(widget.scrollPos)
 
       if widget.hoverVBar then
         local info = getVScrollInfo(widget)
         local pos = dragStartScrollBarPos + (imi.mousePos - dragStartMousePos)
         pos.y = imi.clamp(pos.y, 0, info.fullLen - info.len)
-        widget.scrollPos.y = maxScrollPos.height * pos.y / (info.fullLen - info.len)
+        scrollPos.y = maxScrollPos.height * pos.y / (info.fullLen - info.len)
       else
-        widget.scrollPos = dragStartScrollPos + (dragStartMousePos - imi.mousePos)
+        scrollPos = dragStartScrollPos + (dragStartMousePos - imi.mousePos)
       end
-      widget.scrollPos.y = imi.clamp(widget.scrollPos.y, 0, maxScrollPos.height)
-
-      if oldScrollPos ~= widget.scrollPos then
-        imi.dlg:repaint()
-      end
+      widget.setScrollPos(scrollPos)
       imi.mouseCursor = MouseCursor.GRABBING
     else
       local oldHoverHBar = widget.hoverHBar

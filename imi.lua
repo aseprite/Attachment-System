@@ -66,6 +66,8 @@ local WidgetFlags = {
   CHECKED = 8,
   HOVER = 16,
   DRAGGING = 32,
+  HAS_HBAR = 64,
+  HAS_VBAR = 128,
 }
 
 -- Reset these variables before calling ongui()
@@ -126,6 +128,8 @@ local flagNames = {
   checked=WidgetFlags.CHECKED,
   hover=WidgetFlags.HOVER,
   dragging=WidgetFlags.DRAGGING,
+  hasHBar=WidgetFlags.HAS_HBAR,
+  hasVBar=WidgetFlags.HAS_VBAR,
 }
 local widgetMt = {
   __index=function(widget, field)
@@ -251,6 +255,56 @@ local dragStartMousePos = Point(0, 0)
 local dragStartScrollPos = Point(0, 0)
 local dragStartScrollBarPos = 0
 local dragStartViewportSize = Size(0, 0)
+
+local function setupScrollbars(widget, barSize)
+  local fullViewportSize = Size(widget.viewportSize)
+
+  local function needHBar()
+    return
+      ((widget.scrollableSize.width > widget.viewportSize.width) and
+       (barSize < fullViewportSize.width) and
+       (barSize < fullViewportSize.height))
+  end
+
+  local function needVBar()
+    return
+      ((widget.scrollableSize.height > widget.viewportSize.height) and
+       (barSize < fullViewportSize.width) and
+       (barSize < fullViewportSize.height))
+  end
+
+  widget.hasHBar = false
+  widget.hasVBar = false
+
+  if needHBar() then
+    widget.viewportSize.height = widget.viewportSize.height - barSize
+    widget.hasHBar = true
+
+    if needVBar() then
+      widget.viewportSize.width = widget.viewportSize.width - barSize
+      if needHBar() then
+        widget.hasVBar = true
+      else
+        widget.hasHBar = false
+        widget.viewportSize = Size(fullViewportSize)
+      end
+    else
+    end
+  elseif needVBar() then
+    widget.viewportSize.width = widget.viewportSize.width - barSize
+    widget.hasVBar = true
+
+    if needHBar() then
+      widget.viewportSize.height = widget.viewportSize.height - barSize
+      if needVBar() then
+        widget.hasHBar = true
+      else
+        widget.hasVBar = false
+        widget.viewportSize = Size(fullViewportSize)
+      end
+    end
+  end
+end
 
 local function getHScrollInfo(widget)
   local fullLen = widget.viewportSize.width-3*imi.uiScale
@@ -940,8 +994,9 @@ function imi.endViewport()
 
   local barSize = app.theme.dimension.mini_scrollbar_size
   widget.scrollableSize = imi.scrollableBounds.size
-  widget.viewportSize = Size(bounds.width-barSize-border-1*imi.uiScale,
-                             bounds.height-barSize-border-1*imi.uiScale)
+  widget.viewportSize = Size(bounds.width-border-1*imi.uiScale,
+                             bounds.height-border-1*imi.uiScale)
+  setupScrollbars(widget, barSize)
 
   if widget.withBorder then
     addDrawListFunction(function (ctx)
@@ -983,29 +1038,38 @@ function imi.endViewport()
   end
 
   addDrawListFunction(function (ctx)
-    local bgPart, thumbPart = getParts(widget.hoverHBar)
-    local info = getHScrollInfo(widget)
-    ctx:drawThemeRect(bgPart,
-                      bounds.x+border,
-                      bounds.y+bounds.height-barSize-border-1*imi.uiScale,
-                      bounds.width-2*border-barSize,
-                      barSize+1*imi.uiScale)
-    ctx:drawThemeRect(thumbPart,
-                      bounds.x+border+info.pos,
-                      bounds.y+bounds.height-barSize-border-1*imi.uiScale,
-                      info.len, barSize)
+    local bgPart, thumbPart, info
+    local hbarSize, vbarSize
+    if widget.hasHBar then hbarSize = barSize else hbarSize = 0 end
+    if widget.hasVBar then vbarSize = barSize else vbarSize = 0 end
 
-    bgPart, thumbPart = getParts(widget.hoverVBar)
-    info = getVScrollInfo(widget)
-    ctx:drawThemeRect(bgPart,
-                      bounds.x+bounds.width-barSize-border-1*imi.uiScale,
-                      bounds.y+border,
-                      barSize+1*imi.uiScale,
-                      bounds.height-2*border-barSize)
-    ctx:drawThemeRect(thumbPart,
-                      bounds.x+bounds.width-barSize-border-1*imi.uiScale,
-                      bounds.y+border+info.pos,
-                      barSize, info.len)
+    if widget.hasHBar then
+      bgPart, thumbPart = getParts(widget.hoverHBar)
+      info = getHScrollInfo(widget)
+      ctx:drawThemeRect(bgPart,
+                        bounds.x+border,
+                        bounds.y+bounds.height-barSize-border-1*imi.uiScale,
+                        bounds.width-2*border-vbarSize,
+                        barSize+1*imi.uiScale)
+      ctx:drawThemeRect(thumbPart,
+                        bounds.x+border+info.pos,
+                        bounds.y+bounds.height-barSize-border-1*imi.uiScale,
+                        info.len, barSize)
+    end
+
+    if widget.hasVBar then
+      bgPart, thumbPart = getParts(widget.hoverVBar)
+      info = getVScrollInfo(widget)
+      ctx:drawThemeRect(bgPart,
+                        bounds.x+bounds.width-barSize-border-1*imi.uiScale,
+                        bounds.y+border,
+                        barSize+1*imi.uiScale,
+                        bounds.height-2*border-hbarSize)
+      ctx:drawThemeRect(thumbPart,
+                        bounds.x+bounds.width-barSize-border-1*imi.uiScale,
+                        bounds.y+border+info.pos,
+                        barSize, info.len)
+    end
   end)
 
   local container = table.remove(imi.containersStack)

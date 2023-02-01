@@ -433,6 +433,7 @@ end
 function imi.onmousemove(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = ev.button
+  imi.mouseCursor = MouseCursor.ARROW
   imi.repaint = false
 
   for id,widget in pairs(imi.widgets) do
@@ -466,7 +467,8 @@ function imi.onmousedown(ev)
   imi.mouseButton = ev.button
   imi.repaint = false
 
-  for _,widget in ipairs(imi.mouseWidgets) do
+  for i=#imi.mouseWidgets,1,-1 do
+    local widget = imi.mouseWidgets[i]
     if widget.onmousedown then
       widget.onmousedown(widget)
     end
@@ -476,6 +478,9 @@ function imi.onmousedown(ev)
         widget.pressed = true
         imi.repaint = true
       end
+    end
+    if imi.capturedWidget == widget then
+      break
     end
   end
 
@@ -848,9 +853,9 @@ function imi.beginViewport(size, itemSize)
         scrollPos.x = maxScrollPos.width * pos.x / (info.fullLen - info.len)
       else
         scrollPos = dragStartScrollPos + (dragStartMousePos - imi.mousePos)
+        imi.mouseCursor = MouseCursor.GRABBING
       end
       widget.setScrollPos(scrollPos)
-      imi.mouseCursor = MouseCursor.GRABBING
     elseif widget.draggingVBar then
       local maxScrollPos = widget.scrollableSize - widget.viewportSize
       local scrollPos = Point(widget.scrollPos)
@@ -862,9 +867,9 @@ function imi.beginViewport(size, itemSize)
         scrollPos.y = maxScrollPos.height * pos.y / (info.fullLen - info.len)
       else
         scrollPos = dragStartScrollPos + (dragStartMousePos - imi.mousePos)
+        imi.mouseCursor = MouseCursor.GRABBING
       end
       widget.setScrollPos(scrollPos)
-      imi.mouseCursor = MouseCursor.GRABBING
     else
       local oldHoverHBar = widget.hoverHBar
       local oldHoverVBar = widget.hoverVBar

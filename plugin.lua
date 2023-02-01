@@ -780,10 +780,8 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         end
       end
     end
-    if #frames > 0 then
       app.range.frames = frames
     end
-  end
 
   popup:menuItem{ text="Edit Anchors", onclick=editAnchors }:newrow()
   popup:menuItem{ text="Edit Tile", onclick=editTile }:newrow()

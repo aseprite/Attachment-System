@@ -780,8 +780,12 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         end
       end
     end
-      app.range.frames = frames
-    end
+    app.range.frames = frames
+  end
+
+  local function is_unused_tile(tileIndex)
+    return tilesHistogram[tileIndex] == nil
+  end
 
   popup:menuItem{ text="Edit Anchors", onclick=editAnchors }:newrow()
   popup:menuItem{ text="Edit Tile", onclick=editTile }:newrow()
@@ -792,8 +796,10 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   popup:menuItem{ text="Select usage", onclick=selectFrames }:newrow()
   popup:menuItem{ text="Find next usage", onclick=function() find_next_attachment_usage(ti, MODE_FORWARD) end }:newrow()
   popup:menuItem{ text="Find prev usage", onclick=function() find_next_attachment_usage(ti, MODE_BACKWARDS) end }:newrow()
-  popup:separator()
-  popup:menuItem{ text="Delete", onclick=delete }
+  if folder and (not is_base_set_folder(folder) or is_unused_tile(ti)) then
+    popup:separator()
+    popup:menuItem{ text="Delete", onclick=delete }
+  end
   popup:showMenu()
   imi.repaint = true
 end
@@ -1260,6 +1266,7 @@ local function Sprite_change(ev)
   local repaint = ev.fromUndo
 
   if activeLayer and activeLayer.isTilemap then
+    tilesHistogram = calculate_tiles_histogram(activeLayer)
     local tileImg = get_active_tile_image()
     if tileImg and
        (not activeTileImageInfo or
@@ -1269,12 +1276,21 @@ local function Sprite_change(ev)
       activeTileImageInfo = { id=tileImg.id,
                               version=tileImg.version }
       shrunkenBounds = calculate_shrunken_bounds(activeLayer)
-      tilesHistogram = calculate_tiles_histogram(activeLayer)
       if not imi.isongui then
         repaint = true
       end
     else
       activeTileImageInfo = {}
+    end
+
+    local ti = get_active_tile_index()
+    if ti then
+      local folders = get_layer_properties(activeLayer).folders
+      local baseSet = get_base_set_folder(folders)
+      if not contains(baseSet.items, ti) then
+        table.insert(baseSet.items, ti)
+        activeLayer.properties(PK).folders = folders
+      end
     end
   end
 

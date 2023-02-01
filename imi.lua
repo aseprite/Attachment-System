@@ -875,11 +875,13 @@ function imi.beginViewport(size, itemSize)
       local oldHoverVBar = widget.hoverVBar
 
       widget.hoverHBar =
-        (imi.mousePos.y >= bounds.y+bounds.height-barSize-4*imi.uiScale and
+        (widget.bounds:contains(imi.mousePos) and
+         imi.mousePos.y >= bounds.y+bounds.height-barSize-4*imi.uiScale and
          imi.mousePos.y <= bounds.y+bounds.height)
 
       widget.hoverVBar =
-        (imi.mousePos.x >= bounds.x+bounds.width-barSize-4*imi.uiScale and
+        (widget.bounds:contains(imi.mousePos) and
+         imi.mousePos.x >= bounds.x+bounds.width-barSize-4*imi.uiScale and
          imi.mousePos.x <= bounds.x+bounds.width)
 
       if oldHoverHBar ~= widget.hoverHBar or

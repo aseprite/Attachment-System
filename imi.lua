@@ -737,7 +737,7 @@ end
 --   widget.onviewportresized = function(resizedViewport)
 function imi.beginViewport(size, itemSize)
   local id = imi.getID()
-  local widget = updateWidget(id, { })
+  local widget = updateWidget(id, { withBorder=(itemSize ~= nil) })
   local oldViewportWidget = imi.viewportWidget
 
   if itemSize and widget.resizedViewport then
@@ -745,7 +745,11 @@ function imi.beginViewport(size, itemSize)
                 widget.resizedViewport.height * itemSize.height)
   end
 
-  local border = 4*imi.uiScale -- TODO access theme styles
+  local border = 0
+  if widget.withBorder then
+    border = 4*imi.uiScale -- TODO access theme styles
+  end
+
   local barSize = app.theme.dimension.mini_scrollbar_size
   size.width = size.width + 2*border + barSize
   size.height = size.height + 2*border + barSize
@@ -929,15 +933,22 @@ function imi.endViewport()
   imi.popViewport()
   imi.popLayout()
 
-  local border = 4*imi.uiScale -- TODO access theme styles
+  local border = 0
+  if widget.withBorder then
+    border = 4*imi.uiScale -- TODO access theme styles
+  end
+
   local barSize = app.theme.dimension.mini_scrollbar_size
   widget.scrollableSize = imi.scrollableBounds.size
   widget.viewportSize = Size(bounds.width-barSize-border-1*imi.uiScale,
                              bounds.height-barSize-border-1*imi.uiScale)
 
-  addDrawListFunction(function (ctx)
-    ctx:drawThemeRect('sunken_normal', bounds)
-  end)
+  if widget.withBorder then
+    addDrawListFunction(function (ctx)
+      ctx:drawThemeRect('sunken_normal', bounds)
+    end)
+  end
+
   -- Draw sub items (using the current widget.bounds)
   table.insert(imi.drawList, { type="save" })
 

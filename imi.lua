@@ -82,7 +82,6 @@ local function initVars(ctx)
   imi.breakLines = true
   imi.viewport = Rectangle(0, 0, ctx.width, ctx.height)
   imi.viewportStack = {}
-  imi.containersStack = {}
   imi.idStack = {}
   imi.layoutStack = {}
   imi.groupsStack = {}
@@ -544,7 +543,9 @@ function imi.pushLayout()
     imi.layoutStack,
     { cursor=Point(imi.cursor),
       drawList=imi.drawList,
-      rowHeight=imi.rowHeight })
+      rowHeight=imi.rowHeight,
+      viewportWidget=imi.viewportWidget,
+      scrollableBounds=imi.scrollableBounds })
 
   imi.drawList = {}
   imi.rowHeight = 0
@@ -555,6 +556,8 @@ function imi.popLayout()
   imi.cursor = pop.cursor
   imi.drawList = pop.drawList
   imi.rowHeight = pop.rowHeight
+  imi.viewportWidget = pop.viewportWidget
+  imi.scrollableBounds = pop.scrollableBounds
   table.remove(imi.layoutStack)
 end
 
@@ -792,7 +795,6 @@ end
 function imi.beginViewport(size, itemSize)
   local id = imi.getID()
   local widget = updateWidget(id, { withBorder=(itemSize ~= nil) })
-  local oldViewportWidget = imi.viewportWidget
 
   if itemSize and widget.resizedViewport then
     size = Size(widget.resizedViewport.width * itemSize.width,
@@ -965,16 +967,14 @@ function imi.beginViewport(size, itemSize)
         widget.scrollPos = Point(0, 0)
       end
 
-      imi.viewportWidget = widget
       imi.pushViewport(Rectangle(bounds.x+border,
                                  bounds.y+border,
                                  bounds.width-2*border-barSize,
                                  bounds.height-2*border-barSize))
     end)
 
-  table.insert(imi.containersStack, {widget=oldViewportWidget, scrollableBounds=imi.scrollableBounds})
-
   imi.pushLayout()
+  imi.viewportWidget = widget
   imi.cursor = imi.viewport.origin - imi.widgets[id].scrollPos
   imi.scrollableBounds = Rectangle(imi.cursor, Size(1, 1))
 end
@@ -983,9 +983,6 @@ function imi.endViewport()
   local widget = imi.viewportWidget
   local bounds = widget.bounds
   local subDrawList = imi.drawList
-
-  imi.popViewport()
-  imi.popLayout()
 
   local border = 0
   if widget.withBorder then
@@ -997,6 +994,9 @@ function imi.endViewport()
   widget.viewportSize = Size(bounds.width-border-1*imi.uiScale,
                              bounds.height-border-1*imi.uiScale)
   setupScrollbars(widget, barSize)
+
+  imi.popViewport()
+  imi.popLayout()
 
   if widget.withBorder then
     addDrawListFunction(function (ctx)
@@ -1071,10 +1071,6 @@ function imi.endViewport()
                         barSize, info.len)
     end
   end)
-
-  local container = table.remove(imi.containersStack)
-  imi.viewportWidget = container.widget
-  imi.scrollableBounds = container.scrollableBounds
 end
 
 ----------------------------------------------------------------------

@@ -1299,13 +1299,18 @@ local function canvas_onwheel(ev)
       local widget = imi.mouseWidgets[i]
       if widget.scrollPos then
         local dx = ev.deltaY
+        local dy = 0
         if ev.shiftKey then
           dx = widget.bounds.width*3/4*dx
         else
           dx = 64*dx
         end
+        if widget.hasVBar then
+          dy = dx
+          dx = 0
+        end
         widget.setScrollPos(Point(widget.scrollPos.x + dx,
-                                  widget.scrollPos.y))
+                                  widget.scrollPos.y + dy))
         dlg:repaint()
         break
       end

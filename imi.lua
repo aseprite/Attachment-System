@@ -303,6 +303,9 @@ local function setupScrollbars(widget, barSize)
       end
     end
   end
+
+  -- Clamp scroll pos with the new scrollableSize and viewportSize
+  widget.setScrollPos(widget.scrollPos)
 end
 
 local function getHScrollInfo(widget)

@@ -323,23 +323,28 @@ local function find_next_attachment_usage(ti, mode)
 
   local iniFrame = app.activeFrame.frameNumber
   local prevMatch = nil
-  local istart = 1
-  local iend = #activeLayer.cels
-  local istep = 1
-  local isPrevious = function(frameNum) return frameNum <= iniFrame end
+  local istart, iend, istep
+  local isPrevious
+
   if mode == MODE_BACKWARDS then
     istart = #activeLayer.cels
     iend = 1
     istep = -1
     isPrevious = function(frameNum) return frameNum >= iniFrame end
+  else
+    istart = 1
+    iend = #activeLayer.cels
+    istep = 1
+    isPrevious = function(frameNum) return frameNum <= iniFrame end
   end
-  local cels = activeLayer.cels
-  local cel
-  for i=istart,iend,istep do
-    cel = cels[i]
-    if isPrevious(cel.frameNumber) and prevMatch then goto continue end
 
-    if cel.image then
+  local cels = activeLayer.cels
+  for i=istart,iend,istep do
+    local cel = cels[i]
+    if isPrevious(cel.frameNumber) and prevMatch then
+      -- Go to next/prev frame...
+    elseif cel.image then
+      -- Check if this is cel is an instance of the given attachment (ti)
       local celTi = cel.image:getPixel(0, 0)
       if celTi == ti then
         if isPrevious(cel.frameNumber) then
@@ -350,7 +355,6 @@ local function find_next_attachment_usage(ti, mode)
         end
       end
     end
-    ::continue::
   end
   if prevMatch then
     app.activeCel = prevMatch

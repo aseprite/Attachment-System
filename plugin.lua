@@ -1302,7 +1302,7 @@ local function canvas_onwheel(ev)
   else
     for i=#imi.mouseWidgets,1,-1 do
       local widget = imi.mouseWidgets[i]
-      if widget.scrollPos then
+      if widget.scrollPos and (widget.hasHBar or widget.hasVBar) then
         local dx = ev.deltaY
         local dy = 0
         if ev.shiftKey then

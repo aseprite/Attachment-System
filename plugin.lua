@@ -314,13 +314,14 @@ local function setup_sprite(spr)
   setup_layers(spr.layers)
 end
 
+-- Activates the next cel in the active layer where the given
+-- attachment (ti) is used.
 local MODE_FORWARD = 0
 local MODE_BACKWARDS = 1
--- Activates the next cel in the active layer where the selected attachment is used.
 local function find_next_attachment_usage(ti, mode)
-  if not app.activeCel then return end
+  if not app.activeFrame then return end
 
-  local iniFrame = app.activeCel.frameNumber
+  local iniFrame = app.activeFrame.frameNumber
   local prevMatch = nil
   local istart = 1
   local iend = #activeLayer.cels

@@ -1001,8 +1001,8 @@ function imi.endViewport()
 
   local barSize = app.theme.dimension.mini_scrollbar_size
   widget.scrollableSize = imi.scrollableBounds.size
-  widget.viewportSize = Size(bounds.width-border-1*imi.uiScale,
-                             bounds.height-border-1*imi.uiScale)
+  widget.viewportSize = Size(bounds.width-border,
+                             bounds.height-border)
   setupScrollbars(widget, barSize)
 
   imi.popViewport()

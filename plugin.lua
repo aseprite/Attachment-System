@@ -1136,7 +1136,6 @@ local function imi_ongui()
         ti = cel.image:getPixel(0, 0)
       end
       do
-        local oldCursorY = imi.cursor.y
         local tileImg = ts:getTile(ti)
 
         -- Show active tile in active cel

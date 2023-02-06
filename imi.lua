@@ -959,14 +959,13 @@ function imi.beginViewport(size, itemSize)
         bounds.width = (imi.viewport.x + imi.viewport.width) - bounds.x
       end
 
-      updateWidget(
+      local widget = updateWidget(
         id,
         { bounds=bounds,
           onmousemove=onmousemove,
           onmousedown=onmousedown,
           onmouseup=onmouseup })
 
-      local widget = imi.widgets[id]
       if widget.draggingHBar == nil then
         widget.draggingHBar = false
       end
@@ -985,7 +984,7 @@ function imi.beginViewport(size, itemSize)
 
   imi.pushLayout()
   imi.viewportWidget = widget
-  imi.cursor = imi.viewport.origin - imi.widgets[id].scrollPos
+  imi.cursor = imi.viewport.origin - widget.scrollPos
   imi.scrollableBounds = Rectangle(imi.cursor, Size(1, 1))
 end
 

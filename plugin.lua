@@ -768,7 +768,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
   local function delete()
     table.remove(folder.items, indexInFolder)
-    app.transaction("Delete Folder", function()
+    app.transaction("Delete Attachment from Folder", function()
      activeLayer.properties(PK).folders = folders
     end)
     popup:close()

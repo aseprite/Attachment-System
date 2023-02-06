@@ -792,18 +792,18 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     return tilesHistogram[tileIndex] == nil
   end
 
-  popup:menuItem{ text="Edit Anchors", onclick=editAnchors }:newrow()
-  popup:menuItem{ text="Edit Tile", onclick=editTile }:newrow()
+  popup:menuItem{ text="Edit &Anchors", onclick=editAnchors }:newrow()
+  popup:menuItem{ text="&Edit Attachment", onclick=editTile }:newrow()
   popup:separator():newrow()
-  popup:menuItem{ text="New Empty", onclick=newEmpty }:newrow()
-  popup:menuItem{ text="Duplicate", onclick=duplicate }:newrow()
+  popup:menuItem{ text="&New Empty", onclick=newEmpty }:newrow()
+  popup:menuItem{ text="Dupli&cate", onclick=duplicate }:newrow()
   popup:separator()
-  popup:menuItem{ text="Select usage", onclick=selectFrames }:newrow()
-  popup:menuItem{ text="Find next usage", onclick=function() find_next_attachment_usage(ti, MODE_FORWARD) end }:newrow()
-  popup:menuItem{ text="Find prev usage", onclick=function() find_next_attachment_usage(ti, MODE_BACKWARDS) end }:newrow()
+  popup:menuItem{ text="Select &usage", onclick=selectFrames }:newrow()
+  popup:menuItem{ text="Find &next usage", onclick=function() find_next_attachment_usage(ti, MODE_FORWARD) end }:newrow()
+  popup:menuItem{ text="Find &prev usage", onclick=function() find_next_attachment_usage(ti, MODE_BACKWARDS) end }:newrow()
   if folder and (not is_base_set_folder(folder) or is_unused_tile(ti)) then
     popup:separator()
-    popup:menuItem{ text="Delete", onclick=delete }
+    popup:menuItem{ text="&Delete", onclick=delete }
   end
   popup:showMenu()
   imi.repaint = true

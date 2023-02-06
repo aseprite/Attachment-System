@@ -1263,6 +1263,9 @@ local function imi_ongui()
 
       imi.endViewport()
       imi.popViewport()
+    else
+      imi.ctx.color = app.theme.color.text
+      imi.label("Select a tilemap layer")
     end
   end
 end

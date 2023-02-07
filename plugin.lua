@@ -1167,16 +1167,6 @@ local function Sprite_change(ev)
     else
       activeTileImageInfo = {}
     end
-
-    local ti = get_active_tile_index()
-    if ti then
-      local folders = db.getLayerProperties(activeLayer).folders
-      local baseSet = db.getBaseSetFolder(activeLayer, folders)
-      if not contains(baseSet.items, ti) then
-        table.insert(baseSet.items, ti)
-        activeLayer.properties(PK).folders = folders
-      end
-    end
   end
 
   if repaint then

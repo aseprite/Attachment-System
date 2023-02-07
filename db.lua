@@ -7,7 +7,7 @@
 -- Extension Properties:
 --
 -- Sprite = {
---   version = 1
+--   version = 2
 -- }
 --
 -- Tileset = {            -- A tileset represents a category for one layer
@@ -15,6 +15,7 @@
 -- }
 --
 -- Layer = {
+--   id=layerID,          -- ID for this layer (only for tilemap layers!)
 --   categories={ categoryID1, categoryID2, etc. },
 --   folders={
 --     { name="Folder Name",
@@ -38,7 +39,7 @@ local db = {
   PK = "aseprite/Attachment-System",
 
   -- Version of the database (DB)
-  kLatestDBVersion = 1,
+  kLatestDBVersion = 2,
   kBaseSetName = "Base Set",
 }
 
@@ -61,18 +62,25 @@ local function createBaseSetFolder(layer)
   return { name=db.kBaseSetName, items=items }
 end
 
-local function setupLayers(layers)
+local function setupLayers(spr, layers)
   for _,layer in ipairs(layers) do
     if layer.isTilemap then
-      local id = layer.tileset.properties(PK).id
+      -- Add ID to the layer (this was added in DB version=2)
+      if not layer.properties(PK).id then
+        layer.properties(PK).id = db.calculateNewLayerID(spr)
+      end
+
       local categories = layer.properties(PK).categories
       local folders = layer.properties(PK).folders
+
+      local tilesetID = layer.tileset.properties(PK).id
+      assert(tilesetID ~= nil)
 
       if not categories then
         categories = { }
       end
-      if not contains(categories, id) then
-        table.insert(categories, id)
+      if not contains(categories, tilesetID) then
+        table.insert(categories, tilesetID)
         layer.properties(PK).categories = categories
       end
 
@@ -81,14 +89,32 @@ local function setupLayers(layers)
       end
     end
     if layer.isGroup then
-      setupLayers(layer.layers)
+      setupLayers(spr, layer.layers)
     end
   end
+end
+
+local function calculateMaxLayerIDBetweenLayers(layers)
+  local maxId = 0
+  for i=1,#layers do
+    local layer = layers[i]
+    if layer and layer.properties(PK).id then
+      maxId = math.max(maxId, layer.properties(PK).id)
+    end
+    if layer.isGroup then
+      maxId = math.max(maxId, calculateMaxLayerIDBetweenLayers(layer.layers))
+    end
+  end
+  return maxId
 end
 
 ----------------------------------------------------------------------
 -- Public API
 ----------------------------------------------------------------------
+
+function db.calculateNewLayerID(spr)
+  return 1+calculateMaxLayerIDBetweenLayers(spr.layers)
+end
 
 function db.calculateNewCategoryID(spr)
   local maxId = 0
@@ -122,6 +148,9 @@ end
 -- information just showing the layer in the Attachment System window
 function db.getLayerProperties(layer)
   local properties = layer.properties(PK)
+  if not properties.id then
+    properties.id = db.calculateNewLayerID(layer.sprite)
+  end
   if not properties.categories then
     properties.categories = {}
   end
@@ -146,13 +175,18 @@ function db.setupSprite(spr)
     currentVersion = 0
   end
 
+  -- Add ID to each tileset
   for i=1,#spr.tilesets do
     local tileset = spr.tilesets[i]
-    if tileset then
+    if tileset and not tileset.properties(PK).id then
       tileset.properties(PK).id = db.calculateNewCategoryID(spr)
     end
   end
-  setupLayers(spr.layers)
+
+  -- Setup each tilemap layer
+  setupLayers(spr, spr.layers)
+
+  -- Latest version in the sprite
   spr.properties(PK).version = db.kLatestDBVersion
 end
 

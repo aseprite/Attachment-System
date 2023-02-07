@@ -3,48 +3,13 @@
 --
 -- This file is released under the terms of the MIT license.
 -- Read LICENSE.txt for more information.
-----------------------------------------------------------------------
--- Extension Properties:
---
--- Sprite = {
---   version = 1
--- }
---
--- Tileset = {            -- A tileset represents a category for one layer
---   id = categoryID,     -- Tileset/category ID, referenced by layers that can use this category/tileset
--- }
---
--- Layer = {
---   categories={ categoryID1, categoryID2, etc. },
---   folders={
---     { name="Folder Name",
---       items={ tileIndex1, tileIndex2, ... },
---       viewport=Size(columns, rows) }
---   },
--- }
---
--- Tile 1st approach (used on git branch: issue-18-1)
--- Tile = {
---   pivot=Point(0, 0),
--- }
--- Tile 2nd approach (used on git branch: issue-18-2)
--- Tile = {
---   referencePoint=Point(0, 0),
---   anchors={ { name="name 1", position=Point(0, 0)},
---             { name="name 2", position=Point(0, 0)},
---              ... }
---   },
--- }
-----------------------------------------------------------------------
 
+-- Modules
 local imi = dofile('./imi.lua')
+local db = dofile('./db.lua')
 
--- Plugin-key to access extension properties in layers/tiles/etc.
--- E.g. layer.properties(PK)
-local PK = "aseprite/Attachment-System"
-
--- Constants names
-local kBaseSetName = "Base Set"
+-- Constants
+local PK = db.PK
 local kUnnamedCategory = "(Unnamed)"
 
 -- The main window/dialog
@@ -153,17 +118,6 @@ local function remap_tiles_in_tilemap_layer_delete_index(tilemapLayer, deleteTi)
   end
 end
 
-local function calculate_new_category_id(spr)
-  local maxId = 0
-  for i=1,#spr.tilesets do
-    local tileset = spr.tilesets[i]
-    if tileset and tileset.properties(PK).id then
-      maxId = math.max(maxId, tileset.properties(PK).id)
-    end
-  end
-  return maxId+1
-end
-
 local function find_tileset_by_categoryID(spr, categoryID)
   for i=1,#spr.tilesets do
     local tileset = spr.tilesets[i]
@@ -205,53 +159,6 @@ local function get_active_tile_index()
   return nil
 end
 
-local function create_base_set_folder(layer)
-  local items = {}
-  for i=1,#layer.tileset-1 do
-    table.insert(items, i)
-  end
-  return { name=kBaseSetName, items=items }
-end
-
-local function is_base_set_folder(folder)
-  return (folder.name == kBaseSetName)
-end
-
-local function get_base_set_folder(folders)
-  for _,folder in ipairs(folders) do
-    if is_base_set_folder(folder) then
-      return folder
-    end
-  end
-  folder = create_base_set_folder(activeLayer)
-  table.insert(folders, folder)
-  return folder
-end
-
--- These properties should be set in setup_layers()/setup_sprite(),
--- but we can set them here just in case. Anyway if the setup
--- functions don't fully setup the properties, we'll generate
--- undo/redo information just showing the layer in the Attachment
--- System window
-local function get_layer_properties(layer)
-  local properties = layer.properties(PK)
-  if not properties.categories then
-    properties.categories = {}
-  end
-  local id = layer.tileset.properties(PK).id
-  if not id then
-    id = calculate_new_category_id(layer.sprite)
-    layer.tileset.properties(PK).id = id
-  end
-  if not contains(properties.categories, id) then
-    table.insert(properties.categories, id)
-  end
-  if not properties.folders or #properties.folders == 0 then
-    properties.folders = { create_base_set_folder(layer) }
-  end
-  return properties
-end
-
 local function set_active_tile(ti)
   if activeLayer and activeLayer.isTilemap then
     local cel = activeLayer:cel(app.activeFrame)
@@ -275,43 +182,6 @@ local function set_active_tile(ti)
     imi.repaint = true
     app.refresh()
   end
-end
-
-local function setup_layers(layers)
-  for _,layer in ipairs(layers) do
-    if layer.isTilemap then
-      local id = layer.tileset.properties(PK).id
-      local categories = layer.properties(PK).categories
-      local folders = layer.properties(PK).folders
-
-      if not categories then
-        categories = { }
-      end
-      if not contains(categories, id) then
-        table.insert(categories, id)
-        layer.properties(PK).categories = categories
-      end
-
-      if not folders or #folders == 0 then
-        layer.properties(PK).folders = { create_base_set_folder(layer) }
-      end
-    end
-    if layer.isGroup then
-      setup_layers(layer.layers)
-    end
-  end
-end
-
-local function setup_sprite(spr)
-  -- Setup the sprite DB
-  spr.properties(PK).version = 1
-  for i=1,#spr.tilesets do
-    local tileset = spr.tilesets[i]
-    if tileset then
-      tileset.properties(PK).id = calculate_new_category_id(spr)
-    end
-  end
-  setup_layers(spr.layers)
 end
 
 -- Activates the next cel in the active layer where the given
@@ -720,8 +590,8 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
       table.insert(folder.items, ti)
     end
     -- Add the tile in the Base Set folder (always)
-    if not folder or not is_base_set_folder(folder) then
-      local baseSet = get_base_set_folder(folders)
+    if not folder or not db.isBaseSetFolder(folder) then
+      local baseSet = db.getBaseSetFolder(activeLayer, folders)
       table.insert(baseSet.items, ti)
     end
     activeLayer.properties(PK).folders = folders
@@ -801,7 +671,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   popup:menuItem{ text="Select &usage", onclick=selectFrames }:newrow()
   popup:menuItem{ text="Find &next usage", onclick=function() find_next_attachment_usage(ti, MODE_FORWARD) end }:newrow()
   popup:menuItem{ text="Find &prev usage", onclick=function() find_next_attachment_usage(ti, MODE_BACKWARDS) end }:newrow()
-  if folder and (not is_base_set_folder(folder) or is_unused_tile(ti)) then
+  if folder and (not db.isBaseSetFolder(folder) or is_unused_tile(ti)) then
     popup:separator()
     popup:menuItem{ text="&Delete", onclick=delete }
   end
@@ -895,7 +765,7 @@ local function new_or_rename_category_dialog(categoryTileset)
                          "You cannot have two categories with the same name")
       end
 
-      local id = calculate_new_category_id(spr)
+      local id = db.calculateNewCategoryID(spr)
       app.transaction("New Category", function()
         local cloned = spr:newTileset(activeLayer.tileset)
         cloned.properties(PK).id = id
@@ -1041,7 +911,7 @@ local function show_folder_context_menu(folders, folder)
 
   local popup = Dialog{ parent=imi.dlg }
   popup:menuItem{ text="Sort by Tile Index/ID", onclick=sortByIndex }
-  if not is_base_set_folder(folder) then
+  if not db.isBaseSetFolder(folder) then
     popup:separator()
     popup:menuItem{ text="Rename Folder", onclick=rename }
     popup:menuItem{ text="Delete Folder", onclick=delete }
@@ -1067,17 +937,24 @@ local function imi_ongui()
     imi.ctx.color = app.theme.color.text
     imi.label("No sprite")
   elseif not spr.properties(PK).version or
-         spr.properties(PK).version < 1 then
+         spr.properties(PK).version < db.kLatestDBVersion then
+    local label
+    if not spr.properties(PK).version then
+      label = "Setup Sprite"
+    else
+      label = "Update Sprite Structure"
+    end
+
     imi.sameLine = true
-    if imi.button("Setup Sprite") then
+    if imi.button(label) then
       app.transaction("Setup Attachment System",
-                      function() setup_sprite(spr) end)
+                      function() db.setupSprite(spr) end)
       imi.repaint = true
     end
   else
     dlg:modify{ title=title .. " - " .. app.fs.fileTitle(spr.filename) }
     if activeLayer then
-      local layerProperties = get_layer_properties(activeLayer)
+      local layerProperties = db.getLayerProperties(activeLayer)
       local categories = layerProperties.categories
       local folders = layerProperties.folders
 
@@ -1293,8 +1170,8 @@ local function Sprite_change(ev)
 
     local ti = get_active_tile_index()
     if ti then
-      local folders = get_layer_properties(activeLayer).folders
-      local baseSet = get_base_set_folder(folders)
+      local folders = db.getLayerProperties(activeLayer).folders
+      local baseSet = db.getBaseSetFolder(activeLayer, folders)
       if not contains(baseSet.items, ti) then
         table.insert(baseSet.items, ti)
         activeLayer.properties(PK).folders = folders
@@ -1353,7 +1230,7 @@ local function Sprite_remaptileset(ev)
   -- them.
   if not ev.fromUndo and activeLayer then
     local spr = activeLayer.sprite
-    local layerProperties = get_layer_properties(activeLayer)
+    local layerProperties = db.getLayerProperties(activeLayer)
     local categories = layerProperties.categories
 
     -- Remap all categories

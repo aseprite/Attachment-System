@@ -39,6 +39,7 @@
 --     if data then
 --       ...
 --     end
+--     imi.endDrop()
 --   end
 --
 ----------------------------------------------------------------------
@@ -1165,6 +1166,10 @@ function imi.getDropData(dataType)
   else
     return nil
   end
+end
+
+function imi.endDrop()
+  imi.highlightDropItemPos = nil
 end
 
 return imi

@@ -166,6 +166,8 @@ local function handle_drop_item_in_folder(folders,
                                           sourceFolderName, sourceItemIndex, sourceTileIndex,
                                           targetFolder, targetPosition)
   local dropPosition = imi.highlightDropItemPos
+  assert(dropPosition ~= nil)
+
   local existentItem = get_folder_item_index_by_position(targetFolder, targetPosition)
   local label
 
@@ -766,8 +768,8 @@ local function create_tile_view(folders, folder,
     return Point(imi.viewport.x + itemPos.x*outSize.width - imi.viewportWidget.scrollPos.x,
                  imi.viewport.y + itemPos.y*outSize.height - imi.viewportWidget.scrollPos.y)
   end
-
   imi.image(tileImg, inRc, outSize)
+  imi.alignFunc = nil
   imi.lastBounds = imi.widget.bounds -- Update lastBounds forced
   local imageWidget = imi.widget
 
@@ -1128,6 +1130,7 @@ local function imi_ongui()
           if data then
             set_active_tile(data.ti)
           end
+          imi.endDrop()
         end
       end
 
@@ -1183,12 +1186,13 @@ local function imi_ongui()
 
           if imi.beginDrop() then
             local data = imi.getDropData("tile")
-            if data then
+            if data and imi.highlightDropItemPos then
               handle_drop_item_in_folder(folders,
                                          data.folder, data.index, data.ti,
                                          folder, imi.highlightDropItemPos)
               imi.repaint = true
             end
+            imi.endDrop()
           end
 
           imi.sameLine = true
@@ -1208,13 +1212,14 @@ local function imi_ongui()
               imi.setDragData("tile", { index=index, ti=ti, folder=folder.name })
             elseif imi.beginDrop() then
               local data = imi.getDropData("tile")
-              if data then
+              if data and imi.highlightDropItemPos then
                 handle_drop_item_in_folder(folders,
                                            data.folder, data.index, data.ti,
                                            folder, imi.highlightDropItemPos)
                 imi.repaint = true
                 forceBreak = true -- because the folder.items was modified
               end
+              imi.endDrop()
             end
 
             imi.widget.checked = false

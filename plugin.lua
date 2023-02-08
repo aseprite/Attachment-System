@@ -138,6 +138,72 @@ local function find_tileset_by_name(spr, name)
   return nil
 end
 
+local function get_folder_item_index_by_position(folder, position)
+  for i=1,#folder.items do
+    local itemPos = folder.items[i].position
+    if not itemPos then
+      itemPos = Point(i-1, 0)
+    end
+    if itemPos == position then
+      return i
+    end
+  end
+  return nil
+end
+
+local function handle_drop_item_in_folder(folders,
+                                          sourceFolderName, sourceItemIndex, sourceTileIndex,
+                                          targetFolder, targetPosition)
+  local dropPosition = imi.highlightDropItemPos
+  local existentItem = get_folder_item_index_by_position(targetFolder, targetPosition)
+  local label
+
+  -- Drag-and-drop in the same folder
+  if sourceFolderName == targetFolder.name then
+    -- Drop in an existent item: swap items
+    if existentItem then
+      if sourceItemIndex == existentItem then
+        -- Do nothing when dropping in the same index
+        return
+      end
+
+      targetFolder.items[sourceItemIndex].tile = targetFolder.items[existentItem].tile
+      targetFolder.items[existentItem].tile = sourceTileIndex
+      label = "Swap Attachments"
+
+    -- Drop in an empty space: move item
+    else
+      targetFolder.items[sourceItemIndex].position = targetPosition
+      label = "Move Attachment"
+    end
+
+  -- Drag-and-drop between folders
+  else
+    -- Drop in an existent item: replace item
+    if existentItem then
+      -- Error, trying to remove/replace and attachment in the base set
+      if db.isBaseSetFolder(targetFolder) and
+         targetFolder.items[existentItem].tile ~= sourceTileIndex then
+        return app.alert("Cannot replace an attachment in the base set")
+      end
+
+      targetFolder.items[existentItem].tile = sourceTileIndex
+      label = "Replace Attachment"
+
+    -- Drop in an empty space: copy item
+    else
+      table.insert(targetFolder.items,
+                   { tile=sourceTileIndex, position=targetPosition })
+      label = "Copy Attachment"
+    end
+  end
+
+  app.transaction(label,
+    function()
+      activeLayer.properties(PK).folders = folders
+    end)
+end
+
 local function get_active_tile_image()
   if activeLayer and activeLayer.isTilemap then
     local cel = activeLayer:cel(app.activeFrame)
@@ -587,12 +653,12 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
   local function addInFolderAndBaseSet(ti)
     if folder then
-      table.insert(folder.items, ti)
+      table.insert(folder.items, { tile=ti })
     end
     -- Add the tile in the Base Set folder (always)
     if not folder or not db.isBaseSetFolder(folder) then
       local baseSet = db.getBaseSetFolder(activeLayer, folders)
-      table.insert(baseSet.items, ti)
+      table.insert(baseSet.items, { tile=ti })
     end
     activeLayer.properties(PK).folders = folders
   end
@@ -679,10 +745,19 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   imi.repaint = true
 end
 
-local function create_tile_view(folders, folder, index, ts, ti, inRc, outSize)
+local function create_tile_view(folders, folder,
+                                index, ts, ti,
+                                inRc, outSize, itemPos)
   imi.pushID(index)
   local tileImg = ts:getTile(ti)
+
+  imi.alignFunc = function(cursor, size, lastBounds)
+    return Point(imi.viewport.x + itemPos.x*outSize.width,
+                 imi.viewport.y + itemPos.y*outSize.height)
+  end
+
   imi.image(tileImg, inRc, outSize)
+  imi.lastBounds = imi.widget.bounds -- Update lastBounds forced
   local imageWidget = imi.widget
 
   imi.widget.onmousedown = function(widget)
@@ -880,10 +955,14 @@ end
 
 local function show_folder_context_menu(folders, folder)
   local function sortByIndex()
-    table.sort(folder.items, function(a, b) return a < b end)
+    table.sort(folder.items, function(a, b) return a.tile < b.tile end)
+    for i=1,#folder.items do
+      folder.items[i].position = Point(i-1, 0)
+    end
     app.transaction("Sort Folder", function()
       activeLayer.properties(PK).folders = folders
     end)
+    imi.dlg:repaint()
   end
 
   local function rename()
@@ -1053,6 +1132,7 @@ local function imi_ongui()
                                  imi.viewport.height - imi.cursor.y - (10*imi.uiScale + barSize)))
       imi.beginViewport(imi.viewport.size)
 
+      local forceBreak = false
       for i,folder in ipairs(folders) do
         imi.pushID(i .. folder.name)
         imi.sameLine = true
@@ -1093,49 +1173,56 @@ local function imi_ongui()
           if imi.beginDrop() then
             local data = imi.getDropData("tile")
             if data then
-              if data.folder ~= folder.name then
-                -- Drop a new item at the end of this folder
-                table.insert(folder.items, data.ti)
-                activeLayer.properties(PK).folders = folders
-                imi.repaint = true
-              end
+              handle_drop_item_in_folder(folders,
+                                         data.folder, data.index, data.ti,
+                                         folder, imi.highlightDropItemPos)
+              imi.repaint = true
             end
           end
 
           imi.sameLine = true
           imi.breakLines = false
           imi.margin = 0
-          for index,ti in ipairs(folder.items) do
+          for index=1,#folder.items do
+            local folderItem = folder.items[index]
+            local ti = folderItem.tile
+            local itemPos = folderItem.position
+
             imi.pushID(index)
-            create_tile_view(folders, folder, index, activeLayer.tileset, ti, inRc, outSize2)
+            create_tile_view(folders, folder,
+                             index, activeLayer.tileset,
+                             ti, inRc, outSize2, itemPos)
 
             if imi.beginDrag() then
               imi.setDragData("tile", { index=index, ti=ti, folder=folder.name })
             elseif imi.beginDrop() then
               local data = imi.getDropData("tile")
               if data then
-                -- Drag-and-drop in the same folder
-                if data.folder == folder.name then
-                  table.remove(folder.items, data.index)
-                  table.insert(folder.items, index, data.ti)
-                else
-                  -- Drag-and-drop between folders drops a new item
-                  -- in the "index" position of this folder
-                  table.insert(folder.items, index, data.ti)
-                end
-                activeLayer.properties(PK).folders = folders
+                handle_drop_item_in_folder(folders,
+                                           data.folder, data.index, data.ti,
+                                           folder, imi.highlightDropItemPos)
                 imi.repaint = true
+                forceBreak = true -- because the folder.items was modified
               end
             end
 
             imi.widget.checked = false
             imi.popID()
+
+            if forceBreak then
+              break
+            end
           end
+
           imi.endViewport()
           imi.margin = 4*imi.uiScale
         end
         imi.endGroup()
         imi.popID()
+
+        if forceBreak then
+          break
+        end
       end
 
       imi.endViewport()
@@ -1222,6 +1309,7 @@ local function Sprite_remaptileset(ev)
     local spr = activeLayer.sprite
     local layerProperties = db.getLayerProperties(activeLayer)
     local categories = layerProperties.categories
+    local folders = layerProperties.folders
 
     -- Remap all categories
     for _,categoryID in ipairs(categories) do
@@ -1230,12 +1318,18 @@ local function Sprite_remaptileset(ev)
     end
 
     -- Remap items in folders
-    for _,folder in ipairs(layerProperties.folders) do
+    for f=1,#folders do
+      local folder = folders[f]
       local newItems = {}
-      for k=1,#folder.items do
-        newItems[k] = ev.remap[folder.items[k]]
+      for i=1,#folder.items do
+        table.insert(newItems, { tile=folder.items[i].tile,
+                                 position=folder.items[i].position })
+      end
+      for i=1,#folder.items do
+        newItems[i].tile = ev.remap[folder.items[i].tile]
       end
       folder.items = newItems
+      folders[f] = folder
     end
 
     -- This generates the undo information for first time in the

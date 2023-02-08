@@ -50,7 +50,9 @@ local imi = {
   mouseButton = 0,
   widgets = {},
   capturedWidget = nil, -- Captured widget (when we pressed and are dragging the mouse)
+  draggingWidget = nil, -- Widget being dragged
   targetWidget = nil,   -- Where we drop the capturedWidget
+  highlightDropItemPos = nil,  -- Column/Row position of a item dropped inside a viewport with itemSize
   drawList = {},
   lineHeight = 0,
 }
@@ -364,6 +366,10 @@ function imi.init(values)
   imi.ongui = values.ongui
   imi.canvasId = values.canvas
   imi.widget = nil
+  if imi.draggingWidget then
+    imi.draggingWidget.dragging = false
+    imi.draggingWidget = nil
+  end
 end
 
 function imi.onpaint(ev)
@@ -446,6 +452,8 @@ function imi.onmousemove(ev)
       end
       if widget.dragging then
         imi.repaint = true
+        imi.draggingWidget = widget
+        imi.highlightDropItemPos = nil
       end
       if pointInsideWidgetHierarchy(widget, imi.mousePos) then
         if not widget.hover then
@@ -505,9 +513,10 @@ function imi.onmouseup(ev)
     if widget.pressed then
       if widget.dragging then
         imi.targetWidget = imi.mouseWidgets[#imi.mouseWidgets]
+        imi.draggingWidget = nil
+        widget.dragging = false
       end
       widget.pressed = false
-      widget.dragging = false
       widget.checked = not widget.checked
       imi.repaint = true
     end
@@ -802,7 +811,9 @@ end
 --   widget.onviewportresized = function(resizedViewport)
 function imi.beginViewport(size, itemSize)
   local id = imi.getID()
-  local widget = updateWidget(id, { withBorder=(itemSize ~= nil) })
+  local widget = updateWidget(
+    id, { itemSize=itemSize,
+          withBorder=(itemSize ~= nil) })
 
   if itemSize and widget.resizedViewport then
     size = Size(widget.resizedViewport.width * itemSize.width,
@@ -1027,6 +1038,24 @@ function imi.endViewport()
                        bounds.width-2*border,
                        bounds.height-2*border))
     ctx:clip()
+  end)
+
+  -- Move items in a grid
+  addDrawListFunction(function(ctx)
+    if widget.itemSize and imi.draggingWidget and
+      bounds:contains(imi.mousePos) then
+      local origin = bounds.origin - widget.scrollPos + Point(border, border)
+
+      local itemUV = imi.mousePos - origin
+      itemUV.x = itemUV.x / widget.itemSize.width
+      itemUV.y = itemUV.y / widget.itemSize.height
+      imi.highlightDropItemPos = itemUV
+
+      local rc = Rectangle(0, 0, widget.itemSize.width, widget.itemSize.height)
+      rc.x = origin.x + itemUV.x*rc.width
+      rc.y = origin.y + itemUV.y*rc.height
+      ctx:drawThemeRect('sunken_normal', rc)
+    end
   end)
 
   for _,cmd in ipairs(subDrawList) do

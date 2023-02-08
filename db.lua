@@ -7,7 +7,7 @@
 -- Extension Properties:
 --
 -- Sprite = {
---   version = 2
+--   version = 3
 -- }
 --
 -- Tileset = {            -- A tileset represents a category for one layer
@@ -19,7 +19,7 @@
 --   categories={ categoryID1, categoryID2, etc. },
 --   folders={
 --     { name="Folder Name",
---       items={ tileIndex1, tileIndex2, ... },
+--       items={ { tile=tileIndex1, position=Point(column, row) }, ... },
 --       viewport=Size(columns, rows) }
 --   },
 -- }
@@ -39,7 +39,7 @@ local db = {
   PK = "aseprite/Attachment-System",
 
   -- Version of the database (DB)
-  kLatestDBVersion = 2,
+  kLatestDBVersion = 3,
   kBaseSetName = "Base Set",
 }
 
@@ -57,12 +57,27 @@ end
 local function createBaseSetFolder(layer)
   local items = {}
   for ti=1,#layer.tileset-1 do
-    table.insert(items, ti)
+    table.insert(items, { tile=i, position=Point(ti-1, 0) })
   end
   return { name=db.kBaseSetName, items=items }
 end
 
-local function setupLayers(spr, layers)
+-- Update layer folders from version=1 to version=2 Before this
+-- folders have an array of tile indexes, and now is a tile of objects
+-- (each object with a "tile" field, then a "position" is optional and
+-- created only when we drop).
+local function updateFoldersFromIndexesToObjects(folders)
+  for i=1,#folders do
+    local folder = folders[i]
+    for j=1,#folder.items do
+      folder.items[j] = { tile=folder.items[j], position=Point(j-1, 0) }
+    end
+    folders[i] = folder
+  end
+  return folders
+end
+
+local function setupLayers(spr, currentVersion, layers)
   for _,layer in ipairs(layers) do
     if layer.isTilemap then
       -- Add ID to the layer (this was added in DB version=2)
@@ -86,10 +101,15 @@ local function setupLayers(spr, layers)
 
       if not folders or #folders == 0 then
         layer.properties(PK).folders = { createBaseSetFolder(layer) }
+      elseif currentVersion < 3 then
+        -- In version=3 folders items were converted from tile indexes
+        -- to objects with {tile,position}
+        layer.properties(PK).folders =
+          updateFoldersFromIndexesToObjects(layer.properties(PK).folders)
       end
     end
     if layer.isGroup then
-      setupLayers(spr, layer.layers)
+      setupLayers(spr, currentVersion, layer.layers)
     end
   end
 end
@@ -184,7 +204,7 @@ function db.setupSprite(spr)
   end
 
   -- Setup each tilemap layer
-  setupLayers(spr, spr.layers)
+  setupLayers(spr, currentVersion, spr.layers)
 
   -- Latest version in the sprite
   spr.properties(PK).version = db.kLatestDBVersion

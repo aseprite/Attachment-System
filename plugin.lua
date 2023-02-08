@@ -763,8 +763,8 @@ local function create_tile_view(folders, folder,
   local tileImg = ts:getTile(ti)
 
   imi.alignFunc = function(cursor, size, lastBounds)
-    return Point(imi.viewport.x + itemPos.x*outSize.width,
-                 imi.viewport.y + itemPos.y*outSize.height)
+    return Point(imi.viewport.x + itemPos.x*outSize.width - imi.viewportWidget.scrollPos.x,
+                 imi.viewport.y + itemPos.y*outSize.height - imi.viewportWidget.scrollPos.y)
   end
 
   imi.image(tileImg, inRc, outSize)

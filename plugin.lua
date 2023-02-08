@@ -151,6 +151,17 @@ local function get_folder_item_index_by_position(folder, position)
   return nil
 end
 
+local function find_empty_spot_position(folder, ti)
+  -- TODO improve this when the viewport has more rows available
+  local itemPos = Point(0, 0)
+  while true do
+    local existentItem = get_folder_item_index_by_position(folder, itemPos)
+    if not existentItem then break end
+    itemPos.x = itemPos.x+1
+  end
+  return itemPos
+end
+
 local function handle_drop_item_in_folder(folders,
                                           sourceFolderName, sourceItemIndex, sourceTileIndex,
                                           targetFolder, targetPosition)
@@ -653,12 +664,12 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
   local function addInFolderAndBaseSet(ti)
     if folder then
-      table.insert(folder.items, { tile=ti })
+      table.insert(folder.items, { tile=ti, position=find_empty_spot_position(folder, ti) })
     end
     -- Add the tile in the Base Set folder (always)
     if not folder or not db.isBaseSetFolder(folder) then
       local baseSet = db.getBaseSetFolder(activeLayer, folders)
-      table.insert(baseSet.items, { tile=ti })
+      table.insert(baseSet.items, { tile=ti, position=find_empty_spot_position(baseSet, ti) })
     end
     activeLayer.properties(PK).folders = folders
   end

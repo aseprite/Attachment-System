@@ -20,6 +20,8 @@ local activeLayer         -- Active tilemap (nil if the active layer isn't a til
 local shrunkenBounds = {} -- Minimal bounds between all tiles of the active layer
 local tilesHistogram = {} -- How many times each tile is used in the active layer
 local activeTileImageInfo = {} -- Used to re-calculate info when the tile image changes
+local focusedItem = nil        -- Folder + item with the keyboard focus
+local focusNewItem = nil       -- Used when a key is pressed to navigate and focus other folder item
 local showTilesID = false
 local showTilesUsage = false
 local zoom = 1.0
@@ -149,6 +151,14 @@ local function get_folder_item_index_by_position(folder, position)
     end
   end
   return nil
+end
+
+local function get_folder_position_bounds(folder)
+  local bounds = Rectangle(0, 0, 1, 1)
+  for i=1,#folder.items do
+    bounds = bounds:union(Rectangle(folder.items[i].position, Size(1, 1)))
+  end
+  return bounds
 end
 
 local function find_empty_spot_position(folder, ti)
@@ -773,6 +783,21 @@ local function create_tile_view(folders, folder,
   imi.lastBounds = imi.widget.bounds -- Update lastBounds forced
   local imageWidget = imi.widget
 
+  -- focusFolderItem has a value when a keyboard arrow was pressed to
+  -- navigate through folder items using the keyboard
+  if focusFolderItem and
+     focusFolderItem.folder == folder.name and
+     focusFolderItem.index == index then
+    imi.focusWidget(imi.widget)
+    focusFolderItem = nil
+  end
+
+  -- focusedItem will contain the active focused folder item (used to
+  -- start the keyboard navigation between folder items)
+  if imi.focusedWidget and imi.focusedWidget.id == imi.widget.id then
+    focusedItem = { folder=folder.name, index=index, tile=ti, position=itemPos }
+  end
+
   imi.widget.onmousedown = function(widget)
     -- Context menu
     if imi.mouseButton == MouseButton.RIGHT then
@@ -1146,6 +1171,10 @@ local function imi_ongui()
                                  imi.viewport.height - imi.cursor.y - (10*imi.uiScale + barSize)))
       imi.beginViewport(imi.viewport.size)
 
+      -- The focusedItem will be calculated depending on the widget
+      -- that has the keyboard focus (imi.focusedWidget)
+      focusedItem = nil
+
       local forceBreak = false
       for i,folder in ipairs(folders) do
         imi.pushID(i .. folder.name)
@@ -1274,6 +1303,65 @@ local function Sprite_change(ev)
 
   if repaint then
     imi.dlg:repaint()
+  end
+end
+
+local function canvas_onkeydown(ev)
+  if not activeLayer or
+     not imi.focusedWidget then
+    return
+  end
+
+  local delta
+  if ev.code == "ArrowLeft" then
+    delta = Point(-1, 0)
+  elseif ev.code == "ArrowRight" then
+    delta = Point(1, 0)
+  elseif ev.code == "ArrowUp" then
+    delta = Point(0, -1)
+  elseif ev.code == "ArrowDown" then
+    delta = Point(0, 1)
+  elseif ev.code == "Enter" or ev.code == "NumpadEnter" then
+    -- Select the new tile pressing Enter key
+    if focusedItem then
+      set_active_tile(focusedItem.tile)
+    end
+    ev.stopPropagation()
+    dlg:repaint()
+  elseif ev.code == "Escape" then
+    imi.focusedWidget.focused = false
+    imi.focusedWidget = nil
+    dlg:repaint()
+  end
+
+  if delta then
+    -- Don't send key to Aseprite as we've just used it
+    ev.stopPropagation()
+
+    local folders = activeLayer.properties(PK).folders
+    local folder
+    for i=1,#folders do
+      if folders[i].name == focusedItem.folder then
+        folder = folders[i]
+        break
+      end
+    end
+
+    if folder then
+      local positionBounds = get_folder_position_bounds(folder)
+      local position = Point(focusedItem.position)
+
+      -- Navigate to the next item
+      while positionBounds:contains(position) do
+        position = position + delta
+        local newItem = get_folder_item_index_by_position(folder, position)
+        if newItem then
+          focusFolderItem = { folder=folder.name, index=newItem }
+          dlg:repaint()
+          break
+        end
+      end
+    end
   end
 end
 
@@ -1456,6 +1544,7 @@ local function AttachmentWindow_SwitchWindow()
       :canvas{ id="canvas",
                width=400*imi.uiScale, height=300*imi.uiScale,
                onpaint=imi.onpaint,
+               onkeydown=canvas_onkeydown,
                onmousemove=imi.onmousemove,
                onmousedown=imi.onmousedown,
                onmouseup=imi.onmouseup,

@@ -50,6 +50,7 @@ local imi = {
   mousePos = Point(0, 0),
   mouseButton = 0,
   widgets = {},
+  focusedWidget = nil,  -- Widget with keyboard focus
   capturedWidget = nil, -- Captured widget (when we pressed and are dragging the mouse)
   draggingWidget = nil, -- Widget being dragged
   targetWidget = nil,   -- Where we drop the capturedWidget
@@ -71,6 +72,7 @@ local WidgetFlags = {
   DRAGGING = 32,
   HAS_HBAR = 64,
   HAS_VBAR = 128,
+  WANTS_FOCUS = 256,
 }
 
 -- Reset these variables before calling ongui()
@@ -132,6 +134,7 @@ local flagNames = {
   dragging=WidgetFlags.DRAGGING,
   hasHBar=WidgetFlags.HAS_HBAR,
   hasVBar=WidgetFlags.HAS_VBAR,
+  wantsFocus=WidgetFlags.WANTS_FOCUS,
 }
 local widgetMt = {
   __index=function(widget, field)
@@ -373,6 +376,17 @@ function imi.init(values)
   end
 end
 
+function imi.focusWidget(widget)
+  if imi.focusedWidget then
+    imi.focusedWidget.focused = false
+    imi.focusedWidget = nil
+  end
+  imi.focusedWidget = widget
+  if imi.focusedWidget then
+    imi.focusedWidget.focused = true
+  end
+end
+
 function imi.onpaint(ev)
   local ctx = ev.context
 
@@ -488,8 +502,12 @@ function imi.onmousedown(ev)
     end
     if ev.button == MouseButton.LEFT then
       if widget.hover then
-        imi.capturedWidget = widget
+        if widget.wantsFocus then
+          imi.focusWidget(widget)
+        end
+
         widget.pressed = true
+        imi.capturedWidget = widget
         imi.repaint = true
       end
     end
@@ -754,6 +772,7 @@ function imi.image(image, srcRect, dstSize)
     dstSize,
     function(bounds)
       local widget = updateWidget(id, { bounds=bounds })
+      widget.wantsFocus = true
 
       -- Draw this widget only if it's visible through the current
       -- viewport (if we are in a viewport)
@@ -772,7 +791,8 @@ function imi.image(image, srcRect, dstSize)
 
           ctx:drawImage(image, srcRect, bounds)
           if widget.pressed or
-             widget.checked then
+             widget.checked or
+             widget.focused then
             ctx:drawThemeRect('colorbar_selection_hot',
                               widget.bounds)
           elseif widget.hover then

@@ -1023,9 +1023,9 @@ function imi.endViewport()
   addDrawListFunction(function(ctx)
     ctx:beginPath()
     ctx:rect(Rectangle(bounds.x+border,
-                        bounds.y+border,
-                        bounds.width-2*border,
-                        bounds.height-2*border))
+                       bounds.y+border,
+                       bounds.width-2*border,
+                       bounds.height-2*border))
     ctx:clip()
   end)
 

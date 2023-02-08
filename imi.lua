@@ -478,8 +478,10 @@ function imi.onmousedown(ev)
   imi.mouseButton = ev.button
   imi.repaint = false
 
-  for i=#imi.mouseWidgets,1,-1 do
-    local widget = imi.mouseWidgets[i]
+  local mouseWidgets = imi.mouseWidgets
+  for i=#mouseWidgets,1,-1 do
+    local widget = mouseWidgets[i]
+    assert(widget ~= nil)
     if widget.onmousedown then
       widget.onmousedown(widget)
     end

@@ -368,6 +368,93 @@ local function find_next_attachment_usage(ti, mode)
   end
 end
 
+-- Matches defined reference points <-> anchor points from parent to
+-- children
+local function align_anchors()
+  local spr = app.activeSprite
+  if not spr then return end
+
+  local hierarchy = {}
+  local function create_layers_hierarchy(layers)
+    for i=1,#layers do
+      local layer = layers[i]
+      if layer.isTilemap then
+        local layerProperties = layer.properties(PK)
+        if layerProperties.id then
+          local ts = layer.tileset
+          local ti = 1          -- TODO use all tiles?
+          if ts:tile(ti).properties(PK).anchors then
+            for j=1,#ts:tile(ti).properties(PK).anchors do
+              local childId = ts:tile(ti).properties(PK).anchors[j].layerId
+              if childId then
+                hierarchy[childId] = layerProperties.id
+              end
+            end
+          end
+        end
+      end
+      if layer.isGroup then
+        create_layers_hierarchy(layer.layers)
+      end
+    end
+  end
+  create_layers_hierarchy(spr.layers)
+
+  local movedLayers = {}
+  local function align_layer(childId, parentId, tab)
+    local child = find_layer_by_id(spr, childId)
+    local parent = find_layer_by_id(spr, parentId)
+
+    assert(child)
+    assert(parent)
+
+    if hierarchy[parentId] then
+      align_layer(parentId, hierarchy[parentId], tab+1)
+    end
+
+    if not movedLayers[childId] then
+      table.insert(movedLayers, childId)
+
+      for fr=1,#spr.frames do
+        local parentCel = parent:cel(fr)
+        local childCel = child:cel(fr)
+        if parentCel and parentCel.image and
+           childCel and childCel.image then
+          local parentTs = parent.tileset
+          local parentTi = parentCel.image:getPixel(0, 0)
+          local childTs = child.tileset
+          local childTi = childCel.image:getPixel(0, 0)
+
+          local refPoint = childTs:tile(childTi).properties(PK).ref
+          if refPoint then
+            local anchorPoint = nil
+            local anchors = parentTs:tile(parentTi).properties(PK).anchors
+            for i=1,#anchors do
+              if anchors[i].layerId == childId then
+                anchorPoint = anchors[i].position
+                break
+              end
+            end
+            if anchorPoint then
+              -- Align refPoint with anchorPoint
+              childCel.position =
+                parentCel.position + anchorPoint - refPoint
+            end
+          end
+        end
+      end
+    end
+  end
+
+  app.transaction("Align Anchors",
+    function()
+      for childId,parentId in pairs(hierarchy) do
+        align_layer(childId, parentId, 0)
+      end
+      app.refresh()
+    end)
+end
+
 local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   local popup = Dialog{ parent=imi.dlg }
   local spr = activeLayer.sprite
@@ -760,6 +847,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
   popup:menuItem{ text="Edit &Anchors", onclick=editAnchors }:newrow()
   popup:menuItem{ text="&Edit Attachment", onclick=editTile }:newrow()
+  popup:menuItem{ text="Align Anchors", onclick=align_anchors }:newrow()
   popup:separator():newrow()
   popup:menuItem{ text="&New Empty", onclick=newEmpty }:newrow()
   popup:menuItem{ text="Dupli&cate", onclick=duplicate }:newrow()
@@ -1551,6 +1639,10 @@ local function AttachmentSystem_FindNext(mode)
   end
 end
 
+local function AttachmentSystem_AlignAnchors()
+  align_anchors()
+end
+
 function init(plugin)
   plugin:newCommand{
     id="AttachmentSystem_SwitchWindow",
@@ -1571,6 +1663,13 @@ function init(plugin)
     title="Attachment System: Find previous attachment usage",
     group="view_new",
     onclick=AttachmentSystem_FindNext(MODE_BACKWARDS)
+  }
+
+  plugin:newCommand{
+    id="AttachmentSystem_AlignAnchors",
+    title="Attachment System: Align Anchors",
+    group="view_new",
+    onclick=AttachmentSystem_AlignAnchors
   }
 
   showTilesID = plugin.preferences.showTilesID

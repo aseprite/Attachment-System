@@ -505,7 +505,6 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
             local tempLayer = tempSprite:newLayer()
             tempLayer.name = newAnchorDlg.data.childBox
 
-            table.insert(selectionOptions, newAnchorDlg.data.childBox)
             table.insert(tempLayerStates, { layer=tempLayer })
             tempLayerStates[1].layer.stackIndex = tempLayer.stackIndex
 
@@ -516,6 +515,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
               tempSprite:newCel(tempLayer, i, anchorCrossImage, pos)
             end
 
+            local selectionOptions = generateSelectionOptions()
             blockComboOnchange = true
             anchorActionsDlg:modify{ id="combo",
                                      option=tempLayer.name,

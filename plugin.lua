@@ -30,43 +30,45 @@ local anchorListDlg = nil -- dialog por Checks and Entry widgets for anchor poin
 local tempLayerStates = {}
 local anchorCrossImage  -- crosshair to anchor points -full opacity-
 local refCrossImage
-local black = Color(0,0,0)
 local dlgSkipOnCloseFun = false -- flag to avoid 'onclose' actions of 'dlg' Attachment Window (to act as dlg:modify{visible=false}).
 local tempSprite
 local childTileSelected = 1 -- temporary child tile to display during anchor editing
 
-if anchorCrossImage == nil then
-  anchorCrossImage = Image(3, 3)
-  anchorCrossImage:drawPixel(1, 0, black)
-  anchorCrossImage:drawPixel(0, 1, black)
-  anchorCrossImage:drawPixel(2, 1, black)
-  anchorCrossImage:drawPixel(1, 2, black)
-  anchorCrossImage:drawPixel(1, 1, Color(255,0,0))
-end
+local function create_cross_images(colorMode)
+  local black = Color(0,0,0)
 
+  if not anchorCrossImage or anchorCrossImage.colorMode ~= colorMode then
+    anchorCrossImage = Image(3, 3, colorMode)
+    anchorCrossImage:drawPixel(1, 0, black)
+    anchorCrossImage:drawPixel(0, 1, black)
+    anchorCrossImage:drawPixel(2, 1, black)
+    anchorCrossImage:drawPixel(1, 2, black)
+    anchorCrossImage:drawPixel(1, 1, Color(255,0,0))
+  end
 
-if refCrossImage == nil then
-  refCrossImage = Image(9, 9)
-  refCrossImage:drawPixel(4, 0, black)
-  refCrossImage:drawPixel(4, 1, black)
-  refCrossImage:drawPixel(4, 3, black)
-  refCrossImage:drawPixel(4, 5, black)
-  refCrossImage:drawPixel(4, 7, black)
-  refCrossImage:drawPixel(4, 8, black)
+  if not refCrossImage or refCrossImage.colorMode ~= colorMode then
+    refCrossImage = Image(9, 9, colorMode)
+    refCrossImage:drawPixel(4, 0, black)
+    refCrossImage:drawPixel(4, 1, black)
+    refCrossImage:drawPixel(4, 3, black)
+    refCrossImage:drawPixel(4, 5, black)
+    refCrossImage:drawPixel(4, 7, black)
+    refCrossImage:drawPixel(4, 8, black)
 
-  refCrossImage:drawPixel(0, 4, black)
-  refCrossImage:drawPixel(1, 4, black)
-  refCrossImage:drawPixel(3, 4, black)
-  refCrossImage:drawPixel(5, 4, black)
-  refCrossImage:drawPixel(7, 4, black)
-  refCrossImage:drawPixel(8, 4, black)
+    refCrossImage:drawPixel(0, 4, black)
+    refCrossImage:drawPixel(1, 4, black)
+    refCrossImage:drawPixel(3, 4, black)
+    refCrossImage:drawPixel(5, 4, black)
+    refCrossImage:drawPixel(7, 4, black)
+    refCrossImage:drawPixel(8, 4, black)
 
-  refCrossImage:drawPixel(3, 3, Color(0,0,0,1))
-  refCrossImage:drawPixel(3, 5, Color(0,0,0,1))
-  refCrossImage:drawPixel(5, 3, Color(0,0,0,1))
-  refCrossImage:drawPixel(5, 5, Color(0,0,0,1))
+    refCrossImage:drawPixel(3, 3, Color(0,0,0,1))
+    refCrossImage:drawPixel(3, 5, Color(0,0,0,1))
+    refCrossImage:drawPixel(5, 3, Color(0,0,0,1))
+    refCrossImage:drawPixel(5, 5, Color(0,0,0,1))
 
-  refCrossImage:drawPixel(4, 4, Color(0,0,255))
+    refCrossImage:drawPixel(4, 4, Color(0,0,255))
+  end
 end
 
 local function contains(t, item)
@@ -376,12 +378,14 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   local layerEditableStates = {}
 
   local function editAnchors()
+    create_cross_images(spr.colorMode)
+
     app.transaction("Edit Anchors",
       function()
         tempLayers = {}
         tempLayerStates = {}
         local selectionOptions = { "reference point" }
-        tempSprite = Sprite(ts:tile(ti).image.width, ts:tile(ti).image.height)
+        tempSprite = Sprite(ts:tile(ti).image.width, ts:tile(ti).image.height, spr.colorMode)
         local originalPreferences = { auto_select_layer=app.preferences.editor.auto_select_layer,
                                       auto_select_layer_quick=app.preferences.editor.auto_select_layer_quick }
         local originalTool = app.activeTool.id

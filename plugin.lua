@@ -605,8 +605,8 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
         local selectionOptions = generateSelectionOptions()
         anchorActionsDlg:separator{ text="Anchor Actions" }
-        anchorActionsDlg:button{ text="Remove", focus=false, onclick=removeAnchorPoint }
         anchorActionsDlg:button{ text="Add", focus=true, onclick=addAnchorPoint }
+        anchorActionsDlg:button{ text="Remove", focus=false, onclick=removeAnchorPoint }
         anchorActionsDlg:separator{ text="Ref/Anchor selector" }
         anchorActionsDlg:combobox{ id="combo",
                                    option=selectionOptions[1],

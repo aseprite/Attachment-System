@@ -463,8 +463,10 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           tempLayerStates[1].reference = referencePointsVector
           tempLayerStates[1].referenceIsDefined = referenceIsDefinedVector
         end
-        app.activeLayer = tempLayerStates[1].layer
-        lastLayerSelected = tempLayerStates[1].layer
+        if tempLayerStates and tempLayerStates[1] then
+          app.activeLayer = tempLayerStates[1].layer
+          lastLayerSelected = tempLayerStates[1].layer
+        end
         app.activeFrame = ti
 
         tempLayersLock = true

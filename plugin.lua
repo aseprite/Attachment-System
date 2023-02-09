@@ -385,6 +385,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         tempLayers = {}
         tempLayerStates = {}
         local selectionOptions = { "reference point" }
+        local newAnchorDlg = nil
         tempSprite = Sprite(ts:tile(ti).image.width, ts:tile(ti).image.height, spr.colorMode)
         local originalPreferences = { auto_select_layer=app.preferences.editor.auto_select_layer,
                                       auto_select_layer_quick=app.preferences.editor.auto_select_layer_quick }
@@ -456,9 +457,6 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           app.activeLayer = originalLayer
           dlg:show { wait=false }
           dlgSkipOnCloseFun = false
-          if anchorActionsDlg ~= nil then
-            anchorActionsDlg:close()
-          end
         end
 
         local function generateChildrenOptions()
@@ -487,9 +485,10 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           return options
         end
 
-        anchorActionsDlg = Dialog { title="Ref/Anchor Editor" }
+        anchorActionsDlg = Dialog { title="Ref/Anchor Editor",
+                                    onclose=cancel }
         local blockComboOnchange = false
-        local newAnchorDlg = Dialog { title="Select Child"}
+        newAnchorDlg = Dialog { title="Select Child"}
 
         local function onChangeSelection()
           if not(blockComboOnchange) then
@@ -533,10 +532,13 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
                                               newAnchorDlg:close()
                                             end }
           newAnchorDlg:show { wait=false }
+          local x = anchorActionsDlg.bounds.x + anchorActionsDlg.bounds.width
+          local y = anchorActionsDlg.bounds.y + 15*imi.uiScale
+          newAnchorDlg.bounds = Rectangle(x, y, newAnchorDlg.bounds.width, newAnchorDlg.bounds.height)
         end
 
         local function backToSprite()
-          cancel()
+          anchorActionsDlg:close()
         end
 
         local function acceptPoints()
@@ -603,8 +605,8 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
         local selectionOptions = generateSelectionOptions()
         anchorActionsDlg:separator{ text="Anchor Actions" }
-        anchorActionsDlg:button{ text="Add", onclick=addAnchorPoint }
-        anchorActionsDlg:button{ text="Remove", onclick=removeAnchorPoint }
+        anchorActionsDlg:button{ text="Remove", focus=false, onclick=removeAnchorPoint }
+        anchorActionsDlg:button{ text="Add", focus=true, onclick=addAnchorPoint }
         anchorActionsDlg:separator{ text="Ref/Anchor selector" }
         anchorActionsDlg:combobox{ id="combo",
                                    option=selectionOptions[1],
@@ -613,7 +615,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
         anchorActionsDlg:separator()
         anchorActionsDlg:button{ text="OK", onclick=acceptPoints }
-        anchorActionsDlg:button{ text="Cancel", onclick=cancel }
+        anchorActionsDlg:button{ text="Cancel", onclick=function() anchorActionsDlg:close() end }
         anchorActionsDlg:show{ wait=false }
         anchorActionsDlg.bounds = Rectangle(0, 0, anchorActionsDlg.bounds.width, anchorActionsDlg.bounds.height)
         popup:close()

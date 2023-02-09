@@ -140,17 +140,6 @@ local function remap_tiles_in_tilemap_layer_delete_index(tilemapLayer, deleteTi)
   end
 end
 
-local function calculate_new_category_id(spr)
-  local maxId = 0
-  for i=1,#spr.tilesets do
-    local tileset = spr.tilesets[i]
-    if tileset and tileset.properties(PK).id then
-      maxId = math.max(maxId, tileset.properties(PK).id)
-    end
-  end
-  return maxId+1
-end
-
 local function find_tileset_by_categoryID(spr, categoryID)
   for i=1,#spr.tilesets do
     local tileset = spr.tilesets[i]

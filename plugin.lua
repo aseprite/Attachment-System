@@ -421,29 +421,21 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
         -- Create the reference point Layer, it should be always on top of the stack layers and
         -- it will be first element on the tempLayers vector
-        table.insert(tempLayerStates, 1, { layer=tempSprite:newLayer(),
-                                           reference={},
-                                           referenceIsDefined={} })
-        tempLayerStates[1].layer.name = "reference point"
+        local tempLayer = tempSprite:newLayer()
+        tempLayer.name = "reference point"
+        table.insert(tempLayerStates, 1, { layer=tempLayer })
         local tileset = find_tileset_by_categoryID(spr, originalLayer.properties(PK).categories[1])
-        local referencePointsVector = {}
-        local referenceIsDefinedVector = {}
         for i=1, #tileset-1, 1 do
           local ref = tileset:tile(i).properties(PK).ref
           if ref == nil then
             ref = Point(ts:tile(i).image.width/2, ts:tile(i).image.height/2)
-            table.insert(referenceIsDefinedVector, false)
           else
             ref = tileset:tile(i).properties(PK).ref
-            table.insert(referenceIsDefinedVector, true)
           end
-          table.insert(referencePointsVector, ref)
           local pos = ref - Point(refCrossImage.width/2, refCrossImage.height/2)
-          local cel = tempSprite:newCel(tempLayerStates[1].layer, i, refCrossImage, pos)
+          local cel = tempSprite:newCel(tempLayer, i, refCrossImage, pos)
           cel.properties(PK).origPos = pos
         end
-        tempLayerStates[1].reference = referencePointsVector
-        tempLayerStates[1].referenceIsDefined = referenceIsDefinedVector
         app.activeFrame = ti
 
         local function cancel()
@@ -505,26 +497,24 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         local function addAnchorPoint()
 
           local function addLayerToAllowNewAnchor()
-            table.insert(tempLayerStates, { layer = nil,
-                                            reference=nil,
-                                            referenceIsDefined=false})
-            tempLayerStates[#tempLayerStates].layer = tempSprite:newLayer()
-            tempLayerStates[#tempLayerStates].layer.name = newAnchorDlg.data.childBox
+            local tempLayer = tempSprite:newLayer()
+            tempLayer.name = newAnchorDlg.data.childBox
 
             table.insert(selectionOptions, newAnchorDlg.data.childBox)
+            table.insert(tempLayerStates, { layer=tempLayer })
+            tempLayerStates[1].layer.stackIndex = tempLayer.stackIndex
 
-            tempLayerStates[1].layer.stackIndex = tempLayerStates[#tempLayerStates].layer.stackIndex
-
-            app.activeLayer = tempLayerStates[#tempLayerStates].layer
+            app.activeLayer = tempLayer
             local pos = Point(tempSprite.width/2, tempSprite.height/2)
                         - Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
-            for i=1, #tempSprite.frames, 1 do
-              tempSprite:newCel(tempLayerStates[#tempLayerStates].layer, i, anchorCrossImage, pos)
+            for i=1,#tempSprite.frames do
+              tempSprite:newCel(tempLayer, i, anchorCrossImage, pos)
             end
+
             blockComboOnchange = true
             anchorActionsDlg:modify{ id="combo",
-                                     option=tempLayerStates[#tempLayerStates].layer.name,
-                                     options= selectionOptions }
+                                     option=tempLayer.name,
+                                     options=selectionOptions }
             blockComboOnchange = false
             app.refresh()
           end

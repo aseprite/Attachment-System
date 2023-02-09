@@ -30,7 +30,6 @@ local anchorListDlg = nil -- dialog por Checks and Entry widgets for anchor poin
 local tempLayerStates = {}
 local anchorCrossImage  -- crosshair to anchor points -full opacity-
 local refCrossImage
-local tempLayersLock = false -- tempLayers cannot be modified during App_sitechange
 local black = Color(0,0,0)
 local dlgSkipOnCloseFun = false -- flag to avoid 'onclose' actions of 'dlg' Attachment Window (to act as dlg:modify{visible=false}).
 local tempSprite
@@ -383,7 +382,6 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         tempLayerStates = {}
         local selectionOptions = { "reference point" }
         local childrenOptions = { "no child" }
-        local lastLayerSelected
         tempSprite = Sprite(ts:tile(ti).image.width, ts:tile(ti).image.height)
         local originalPreferences = { auto_select_layer=app.preferences.editor.auto_select_layer,
                                       auto_select_layer_quick=app.preferences.editor.auto_select_layer_quick }
@@ -405,9 +403,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         if ts:tile(ti).properties(PK).anchors ~= nil then
           -- Create the layers
           for i=1, #ts:tile(ti).properties(PK).anchors, 1 do
-            table.insert(tempLayerStates, { layer=tempSprite:newLayer(),
-                                            reference=nil,
-                                            referenceIsDefined=false })
+            table.insert(tempLayerStates, { layer=tempSprite:newLayer() })
             auxLayer = find_layer_by_id(spr, ts:tile(ti).properties(PK).anchors[i].layerId)
             if auxLayer ~= nil then
               tempLayerStates[#tempLayerStates].layer.name = auxLayer.name
@@ -422,57 +418,36 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
               tempSprite:newCel(tempLayerStates[j].layer, i, anchorCrossImage, pos)
             end
           end
+        end
 
-          -- Load the reference points
-          local reference
-          for i=1, #tempLayerStates, 1 do
-            local layerSameNameOnSpr = find_layer_by_name(spr, tempLayerStates[i].layer.name)
-            if layerSameNameOnSpr.properties(PK).categories ~= nil and
-              #layerSameNameOnSpr.properties(PK).categories >= 1 and
-              layerSameNameOnSpr.tileset:tile(childTileSelected).properties(PK).ref ~= nil then
-              local refTileset = find_tileset_by_categoryID(spr, layerSameNameOnSpr.properties(PK).categories[1])
-              tempLayerStates[i].reference = refTileset:tile(childTileSelected).properties(PK).ref
-              tempLayerStates[i].referenceIsDefined=true
-            else
-              tempLayerStates[i].reference = Point(image.width/2, image.height/2)
-            end
+        -- Create the reference point Layer, it should be always on top of the stack layers and
+        -- it will be first element on the tempLayers vector
+        table.insert(tempLayerStates, 1, { layer=tempSprite:newLayer(),
+                                            reference={},
+                                            referenceIsDefined={},
+                                            layerWithChildImageID=0 })
+        tempLayerStates[1].layer.name = "reference point"
+        local tileset = find_tileset_by_categoryID(spr, originalLayer.properties(PK).categories[1])
+        local referencePointsVector = {}
+        local referenceIsDefinedVector = {}
+        for i=1, #tileset-1, 1 do
+          local ref = tileset:tile(i).properties(PK).ref
+          if ref == nil then
+            ref = Point(ts:tile(i).image.width/2, ts:tile(i).image.height/2)
+            table.insert(referenceIsDefinedVector, false)
+          else
+            ref = tileset:tile(i).properties(PK).ref
+            table.insert(referenceIsDefinedVector, true)
           end
-          -- Create the reference point Layer, it should be always on top of the stack layers and
-          -- it will be first element on the tempLayers vector
-          table.insert(tempLayerStates, 1, { layer=tempSprite:newLayer(),
-                                             reference={},
-                                             referenceIsDefined={},
-                                             layerWithChildImageID=0 })
-          tempLayerStates[1].layer.name = "reference point"
-          local tileset = find_tileset_by_categoryID(spr, originalLayer.properties(PK).categories[1])
-          local referencePointsVector = {}
-          local referenceIsDefinedVector = {}
-          for i=1, #tileset-1, 1 do
-            local ref = tileset:tile(i).properties(PK).ref
-            if ref == nil then
-              ref = Point(ts:tile(i).image.width/2, ts:tile(i).image.height/2)
-              table.insert(referenceIsDefinedVector, false)
-            else
-              ref = tileset:tile(i).properties(PK).ref
-              table.insert(referenceIsDefinedVector, true)
-            end
-            table.insert(referencePointsVector, ref)
-            local pos = ref - Point(refCrossImage.width/2, refCrossImage.height/2)
-            tempSprite:newCel(tempLayerStates[1].layer, i, refCrossImage, pos)
-          end
-          tempLayerStates[1].reference = referencePointsVector
-          tempLayerStates[1].referenceIsDefined = referenceIsDefinedVector
+          table.insert(referencePointsVector, ref)
+          local pos = ref - Point(refCrossImage.width/2, refCrossImage.height/2)
+          tempSprite:newCel(tempLayerStates[1].layer, i, refCrossImage, pos)
         end
-        if tempLayerStates and tempLayerStates[1] then
-          app.activeLayer = tempLayerStates[1].layer
-          lastLayerSelected = tempLayerStates[1].layer
-        end
+        tempLayerStates[1].reference = referencePointsVector
+        tempLayerStates[1].referenceIsDefined = referenceIsDefinedVector
         app.activeFrame = ti
 
-        tempLayersLock = true
-
         local function cancel()
-          tempLayersLock = true
           if tempSprite ~= nil then
             tempSprite:close()
           end
@@ -489,7 +464,6 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           if anchorActionsDlg ~= nil then
             anchorActionsDlg:close()
           end
-          tempLayersLock = false
         end
 
         anchorActionsDlg = Dialog { title="Ref/Anchor Editor" }
@@ -513,10 +487,8 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         end
 
         local function addAnchorPoint()
-          tempLayersLock = true
 
           local function addLayerToAllowNewAnchor()
-            tempLayersLock = true
             table.insert(tempLayerStates, { layer = nil,
                                             reference=nil,
                                             referenceIsDefined=false})
@@ -539,7 +511,6 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
                                      options= selectionOptions }
             blockComboOnchange = false
             app.refresh()
-            tempLayersLock = false
           end
 
           childrenOptions = { "no child" }

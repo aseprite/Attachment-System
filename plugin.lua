@@ -612,8 +612,8 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
                                    onchange=onChangeSelection } :newrow()
 
         anchorActionsDlg:separator()
-        anchorActionsDlg:button{ text="Cancel", onclick=cancel }
         anchorActionsDlg:button{ text="OK", onclick=acceptPoints }
+        anchorActionsDlg:button{ text="Cancel", onclick=cancel }
         anchorActionsDlg:show{ wait=false }
         anchorActionsDlg.bounds = Rectangle(0, 0, anchorActionsDlg.bounds.width, anchorActionsDlg.bounds.height)
         popup:close()

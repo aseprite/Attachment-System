@@ -498,7 +498,9 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         end
 
         local function addAnchorPoint()
-
+          if newAnchorDlg ~= nil then
+            newAnchorDlg:close()
+          end
           local function addLayerToAllowNewAnchor()
             local tempLayer = tempSprite:newLayer()
             tempLayer.name = newAnchorDlg.data.childBox

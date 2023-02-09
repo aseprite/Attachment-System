@@ -381,7 +381,6 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         tempLayers = {}
         tempLayerStates = {}
         local selectionOptions = { "reference point" }
-        local childrenOptions = { "no child" }
         tempSprite = Sprite(ts:tile(ti).image.width, ts:tile(ti).image.height)
         local originalPreferences = { auto_select_layer=app.preferences.editor.auto_select_layer,
                                       auto_select_layer_quick=app.preferences.editor.auto_select_layer_quick }
@@ -423,9 +422,8 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         -- Create the reference point Layer, it should be always on top of the stack layers and
         -- it will be first element on the tempLayers vector
         table.insert(tempLayerStates, 1, { layer=tempSprite:newLayer(),
-                                            reference={},
-                                            referenceIsDefined={},
-                                            layerWithChildImageID=0 })
+                                           reference={},
+                                           referenceIsDefined={} })
         tempLayerStates[1].layer.name = "reference point"
         local tileset = find_tileset_by_categoryID(spr, originalLayer.properties(PK).categories[1])
         local referencePointsVector = {}
@@ -467,18 +465,35 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           end
         end
 
+        local function generateChildrenOptions()
+          local options = { "no child" }
+          for _,layer in ipairs(spr.layers) do
+            if layer.isTilemap and layer ~= originalLayer then
+              table.insert(options, layer.name)
+            end
+          end
+          for i=2, #tempLayerStates, 1 do
+            for j=2, #options, 1 do
+              if tempLayerStates[i].layer.name == options[j] then
+                table.remove(options, j)
+                break
+              end
+            end
+          end
+          return options
+        end
+
+        local function generateSelectionOptions()
+          local options = {}
+          for i=1, #tempLayerStates, 1 do
+            table.insert(options, tempLayerStates[i].layer.name)
+          end
+          return options
+        end
+
         anchorActionsDlg = Dialog { title="Ref/Anchor Editor" }
         local blockComboOnchange = false
         local newAnchorDlg = Dialog { title="Select Child"}
-
-        local function drawAnchorOnImage(image, reference)
-          local pos = reference - Point(1, 1)
-          image:drawPixel(pos.x+1, pos.y  , black)
-          image:drawPixel(pos.x  , pos.y+1, black)
-          image:drawPixel(pos.x+2, pos.y+1, black)
-          image:drawPixel(pos.x+1, pos.y+2, black)
-          image:drawPixel(pos.x+1, pos.y+1, Color(255,0,0))
-        end
 
         local function onChangeSelection()
           if not(blockComboOnchange) then
@@ -514,12 +529,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
             app.refresh()
           end
 
-          childrenOptions = { "no child" }
-          for _,layer in ipairs(spr.layers) do
-            if layer.isTilemap and layer ~= originalLayer then
-              table.insert(childrenOptions, layer.name)
-            end
-          end
+          local childrenOptions = generateChildrenOptions()
           newAnchorDlg = Dialog { title="Select Child"}
           newAnchorDlg:combobox { id="childBox",
                                   option="no child",
@@ -578,6 +588,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           backToSprite()
         end
 
+        local selectionOptions = generateSelectionOptions()
         anchorActionsDlg:separator{ text="Anchor Actions" }
         anchorActionsDlg:button{ text="Add", onclick=addAnchorPoint }
         anchorActionsDlg:button{ text="Remove", onclick=removeAnchorPoint }

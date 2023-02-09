@@ -25,11 +25,11 @@
 -- }
 --
 -- Tile = {
---   referencePoint=Point(0, 0),
---   anchors={ { name="name 1", position=Point(0, 0)},
---             { name="name 2", position=Point(0, 0)},
---              ... }
---   },
+--   ref=Point(x, y), -- this reference point is present only in the categoryID1 tileset
+--   anchors={
+--     { layerId=layerID,
+--       position=Point(x1, y1)},
+--   }
 -- }
 ----------------------------------------------------------------------
 

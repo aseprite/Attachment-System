@@ -33,6 +33,7 @@ local refCrossImage
 local dlgSkipOnCloseFun = false -- flag to avoid 'onclose' actions of 'dlg' Attachment Window (to act as dlg:modify{visible=false}).
 local tempSprite
 local childTileSelected = 1 -- temporary child tile to display during anchor editing
+local lockUpdateRefAnchorSelector = false
 
 local function create_cross_images(colorMode)
   local black = Color(0,0,0)
@@ -473,6 +474,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         tempLayerStates = {}
         local selectionOptions = { "reference point" }
         local newAnchorDlg = nil
+        lockUpdateRefAnchorSelector = true
         tempSprite = Sprite(ts:tile(ti).image.width, ts:tile(ti).image.height, spr.colorMode)
         local originalPreferences = { auto_select_layer=app.preferences.editor.auto_select_layer,
                                       auto_select_layer_quick=app.preferences.editor.auto_select_layer_quick }
@@ -529,8 +531,10 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           cel.properties(PK).origPos = pos
         end
         app.activeFrame = ti
+        lockUpdateRefAnchorSelector = false
 
         local function cancel()
+          lockUpdateRefAnchorSelector = true
           if tempSprite ~= nil then
             tempSprite:close()
           end
@@ -543,6 +547,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           app.activeTool = originalTool
           app.activeLayer = originalLayer
           dlg:show { wait=false }
+          lockUpdateRefAnchorSelector = false
           dlgSkipOnCloseFun = false
         end
 
@@ -572,19 +577,24 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           return options
         end
 
+        lockUpdateRefAnchorSelector = true
         anchorActionsDlg = Dialog { title="Ref/Anchor Editor",
                                     onclose=cancel }
         local blockComboOnchange = false
         newAnchorDlg = Dialog { title="Select Child"}
+        lockUpdateRefAnchorSelector = false
 
         local function onChangeSelection()
           if not(blockComboOnchange) then
+            lockUpdateRefAnchorSelector = true
             local layer = find_layer_by_name(tempSprite, anchorActionsDlg.data.combo)
             app.activeLayer = layer
+            lockUpdateRefAnchorSelector = false
           end
         end
 
         local function addAnchorPoint()
+          lockUpdateRefAnchorSelector = true
           if newAnchorDlg ~= nil then
             newAnchorDlg:close()
           end
@@ -624,6 +634,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           local x = anchorActionsDlg.bounds.x + anchorActionsDlg.bounds.width
           local y = anchorActionsDlg.bounds.y + 15*imi.uiScale
           newAnchorDlg.bounds = Rectangle(x, y, newAnchorDlg.bounds.width, newAnchorDlg.bounds.height)
+          lockUpdateRefAnchorSelector = false
         end
 
         local function backToSprite()
@@ -631,6 +642,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         end
 
         local function acceptPoints()
+          lockUpdateRefAnchorSelector = true
           local origFrame = app.activeFrame
           local origLayer = app.activeLayer
           local refTileset = find_tileset_by_categoryID(spr, originalLayer.properties(PK).categories[1])
@@ -670,10 +682,13 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           end
           app.activeFrame = origFrame
           app.activeLayer = origLayer
+          tempLayerStates = nil
+          lockUpdateRefAnchorSelector = false
           backToSprite()
         end
 
         local function removeAnchorPoint()
+          lockUpdateRefAnchorSelector = true
           local layerToRemove = find_layer_by_name(tempSprite, anchorActionsDlg.data.combo)
           if tempLayerStates[1].layer == layerToRemove then return end
           for i=2, #tempLayerStates, 1 do
@@ -690,8 +705,10 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
                                     options= selectionOptions }
           blockComboOnchange = false
           app.refresh()
+          lockUpdateRefAnchorSelector = false
         end
 
+        lockUpdateRefAnchorSelector = true
         local selectionOptions = generateSelectionOptions()
         anchorActionsDlg:separator{ text="Anchor Actions" }
         anchorActionsDlg:button{ text="Add", focus=true, onclick=addAnchorPoint }
@@ -710,6 +727,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         popup:close()
         dlgSkipOnCloseFun = true
         dlg:close()
+        lockUpdateRefAnchorSelector = false
       end)
   end
 
@@ -1557,9 +1575,23 @@ local function observe_sprite(spr)
   end
 end
 
+local function updateRefAnchorSelector()
+  if lockUpdateRefAnchorSelector or not(tempLayerStates) then return end
+  for i=1, #tempLayerStates do
+    if tempLayerStates[i].layer == app.activeLayer then
+      anchorActionsDlg:modify { id="combo",
+                                option=tempLayerStates[i].layer.name }
+      app.refresh()
+      break
+    end
+  end
+end
+
 -- When the active site (active sprite, cel, frame, etc.) changes this
 -- function will be called.
 local function App_sitechange(ev)
+
+  updateRefAnchorSelector()
 
   local newSpr = app.activeSprite
   if newSpr ~= observedSprite then

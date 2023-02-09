@@ -578,6 +578,25 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           backToSprite()
         end
 
+        local function removeAnchorPoint()
+          local layerToRemove = find_layer_by_name(tempSprite, anchorActionsDlg.data.combo)
+          if tempLayerStates[1].layer == layerToRemove then return end
+          for i=2, #tempLayerStates, 1 do
+            if tempLayerStates[i].layer == layerToRemove then
+              tempSprite:deleteLayer(layerToRemove)
+              table.remove(tempLayerStates, i)
+              break
+            end
+          end
+          local selectionOptions = generateSelectionOptions()
+          blockComboOnchange = true
+          anchorActionsDlg:modify{ id="combo",
+                                    option=selectionOptions[1],
+                                    options= selectionOptions }
+          blockComboOnchange = false
+          app.refresh()
+        end
+
         local selectionOptions = generateSelectionOptions()
         anchorActionsDlg:separator{ text="Anchor Actions" }
         anchorActionsDlg:button{ text="Add", onclick=addAnchorPoint }

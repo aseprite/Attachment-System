@@ -33,7 +33,7 @@ local refCrossImage
 local dlgSkipOnCloseFun = false -- flag to avoid 'onclose' actions of 'dlg' Attachment Window (to act as dlg:modify{visible=false}).
 local tempSprite
 local childTileSelected = 1 -- temporary child tile to display during anchor editing
-local lockUpdateRefAnchorSelector = false
+local lockUpdateRefAnchorSelector = false -- flag to lock the update of Ref/Anchor selector comboBox
 
 local function create_cross_images(colorMode)
   local black = Color(0,0,0)
@@ -460,7 +460,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   local popup = Dialog{ parent=imi.dlg }
   local spr = activeLayer.sprite
 
-  -- Variables and Functions associated to editAnchors() and editTile()
+  -- Variables and Functions associated to editAnchors() and editAttachment()
 
   local originalLayer = activeLayer
   local layerEditableStates = {}
@@ -731,52 +731,56 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
       end)
   end
 
-  local function editTile()
-    app.transaction(
+  local function editAttachment()
+    originalLayer = activeLayer
+    layerEditableStates = {}
+    dlgSkipOnCloseFun = true
+    dlg:close()
+
+    local function cancel()
+      if tempSprite ~= nil then
+        tempSprite:close()
+      end
+      dlgSkipOnCloseFun = false
+      dlg:show{ wait=false }
+    end
+
+    local editAttachmentDlg = Dialog{ title="Edit Attachment", onclose=cancel }
+    editAttachmentDlg:label{ text="When finish press OK" }
+    local tileSize = ts.grid.tileSize
+    tempSprite = Sprite(tileSize.width, tileSize.height, spr.colorMode)
+    app.transaction("New Sprite for attachment edition",
       function()
-        originalLayer = activeLayer
-        layerEditableStates = {}
-        dlgSkipOnCloseFun = true
-        dlg:close()
-
-        local function cancel()
-          if tempSprite ~= nil then
-            tempSprite:close()
-          end
-          dlgSkipOnCloseFun = false
-          dlg:show{ wait=false }
-        end
-
-        local editTilePopup = Dialog{ title="Edit Tile", onclose=cancel }
-        editTilePopup:label{ text="When finish press OK" }
-        local tileSize = ts.grid.tileSize
-        tempSprite = Sprite(tileSize.width, tileSize.height)
         local palette = spr.palettes[1]
         tempSprite.palettes[1]:resize(#palette)
         for i=0, #palette-1, 1 do
           tempSprite.palettes[1]:setColor(i, palette:getColor(i))
         end
         tempSprite.cels[1].image = ts:tile(ti).image
-
-        local function accept()
-          if tempSprite ~= nil then
-            local image = Image(ts:tile(ti).image.width, ts:tile(ti).image.height)
-            image:drawImage(app.activeCel.image, app.activeCel.position)
-            ts:tile(ti).image = image
-          end
-          editTilePopup:close()
-        end
-
-        editTilePopup:button{ text="Cancel", onclick=function() editTilePopup:close() end }
-        editTilePopup:button{ text="OK", onclick=accept }:newrow()
-        editTilePopup:show{ wait=false }
-        editTilePopup.bounds = Rectangle(120*imi.uiScale,
-                                         60*imi.uiScale,
-                                         editTilePopup.bounds.width,
-                                         editTilePopup.bounds.height)
-        popup:close()
-        app.refresh()
       end)
+
+    local function accept()
+      if tempSprite ~= nil then
+        local image = Image(ts:tile(ti).image.width, ts:tile(ti).image.height)
+        image:drawImage(app.activeCel.image, app.activeCel.position)
+        app.activeSprite = spr
+        app.transaction("Tile modified",
+          function()
+            ts:tile(ti).image = image
+          end)
+      end
+      editAttachmentDlg:close()
+    end
+
+    editAttachmentDlg:button{ text="Cancel", onclick=function() editAttachmentDlg:close() end }
+    editAttachmentDlg:button{ text="OK", onclick=accept }:newrow()
+    editAttachmentDlg:show{ wait=false }
+    editAttachmentDlg.bounds = Rectangle(60*imi.uiScale,
+                                         60*imi.uiScale,
+                                         editAttachmentDlg.bounds.width,
+                                         editAttachmentDlg.bounds.height)
+    popup:close()
+    app.refresh()
   end
 
   local function forEachCategoryTileset(func)
@@ -864,7 +868,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   end
 
   popup:menuItem{ text="Edit &Anchors", onclick=editAnchors }:newrow()
-  popup:menuItem{ text="&Edit Attachment", onclick=editTile }:newrow()
+  popup:menuItem{ text="&Edit Attachment", onclick=editAttachment }:newrow()
   popup:menuItem{ text="Align Anchors", onclick=align_anchors }:newrow()
   popup:separator():newrow()
   popup:menuItem{ text="&New Empty", onclick=newEmpty }:newrow()

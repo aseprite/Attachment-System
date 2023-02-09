@@ -147,6 +147,16 @@ function db.calculateNewCategoryID(spr)
   return maxId+1
 end
 
+function db.findTilesetByCategoryID(spr, categoryID)
+  for i=1,#spr.tilesets do
+    local ts = spr.tilesets[i]
+    if ts and ts.properties(PK).id == categoryID then
+      return ts
+    end
+  end
+  return nil
+end
+
 function db.isBaseSetFolder(folder)
   return (folder.name == db.kBaseSetName)
 end

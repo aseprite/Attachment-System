@@ -140,16 +140,6 @@ local function remap_tiles_in_tilemap_layer_delete_index(tilemapLayer, deleteTi)
   end
 end
 
-local function find_tileset_by_categoryID(spr, categoryID)
-  for i=1,#spr.tilesets do
-    local tileset = spr.tilesets[i]
-    if tileset and tileset.properties(PK).id == categoryID then
-      return tileset
-    end
-  end
-  return nil
-end
-
 local function find_layer_by_id(spr, id)
   for _,layer in ipairs(spr.layers) do
     if layer.isTilemap and layer.properties(PK).id == id then
@@ -507,7 +497,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         local tempLayer = tempSprite:newLayer()
         tempLayer.name = "reference point"
         table.insert(tempLayerStates, 1, { layer=tempLayer })
-        local tileset = find_tileset_by_categoryID(spr, originalLayer.properties(PK).categories[1])
+        local tileset = db.findTilesetByCategoryID(spr, originalLayer.properties(PK).categories[1])
         for i=1, #tileset-1, 1 do
           local ref = tileset:tile(i).properties(PK).ref
           if ref == nil then
@@ -634,7 +624,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           lockUpdateRefAnchorSelector = true
           local origFrame = app.activeFrame
           local origLayer = app.activeLayer
-          local refTileset = find_tileset_by_categoryID(spr, originalLayer.properties(PK).categories[1])
+          local refTileset = db.findTilesetByCategoryID(spr, originalLayer.properties(PK).categories[1])
           local cels = tempLayerStates[1].layer.cels
           for _,cel in ipairs(cels)  do
             if cel.position ~= cel.properties(PK).origPos then
@@ -664,7 +654,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           end
 
           for i=1, #originalLayer.properties(PK).categories, 1 do
-            local tileset = find_tileset_by_categoryID(spr, originalLayer.properties(PK).categories[i])
+            local tileset = db.findTilesetByCategoryID(spr, originalLayer.properties(PK).categories[i])
             for tileId=1, #refTileset-1, 1 do
               tileset:tile(tileId).properties(PK).anchors = auxAnchorsByTile[tileId]
             end
@@ -774,7 +764,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
   local function forEachCategoryTileset(func)
     for i,categoryID in ipairs(activeLayer.properties(PK).categories) do
-      local catTileset = find_tileset_by_categoryID(spr, categoryID)
+      local catTileset = db.findTilesetByCategoryID(spr, categoryID)
       func(catTileset)
     end
   end
@@ -942,7 +932,7 @@ local function create_tile_view(folders, folder,
 
   -- As the reference point is only in the base category, we have to
   -- check its existence in the base category
-  local baseTileset = find_tileset_by_categoryID(activeLayer.sprite,
+  local baseTileset = db.findTilesetByCategoryID(activeLayer.sprite,
                                                  activeLayer.properties(PK).categories[1])
   if not baseTileset then baseTileset = ts end
   if baseTileset:tile(ti).properties(PK).ref == nil then
@@ -1025,7 +1015,7 @@ local function show_categories_selector(categories, activeTileset)
         activeLayer.properties(PK).categories = categories
 
         -- We set the tileset of the layer to the first category available
-        local newTileset = find_tileset_by_categoryID(spr, categories[1])
+        local newTileset = db.findTilesetByCategoryID(spr, categories[1])
         local oldTileset = activeLayer.tileset
         activeLayer.tileset = newTileset
 
@@ -1040,7 +1030,7 @@ local function show_categories_selector(categories, activeTileset)
   local popup = Dialog{ parent=imi.dlg }
   if categories and #categories > 0 then
     for i,categoryID in ipairs(categories) do
-      local catTileset = find_tileset_by_categoryID(spr, categoryID)
+      local catTileset = db.findTilesetByCategoryID(spr, categoryID)
       if catTileset == nil then assert(false) end
 
       local checked = (categoryID == activeTileset.properties(PK).id)
@@ -1051,7 +1041,7 @@ local function show_categories_selector(categories, activeTileset)
                         popup:close()
                         app.transaction("Select Category",
                           function()
-                            activeLayer.tileset = find_tileset_by_categoryID(spr, categoryID)
+                            activeLayer.tileset = db.findTilesetByCategoryID(spr, categoryID)
                           end)
                         app.refresh()
                       end }:newrow()
@@ -1525,7 +1515,7 @@ local function Sprite_remaptileset(ev)
 
     -- Remap all categories
     for _,categoryID in ipairs(categories) do
-      local tileset = find_tileset_by_categoryID(spr, categoryID)
+      local tileset = db.findTilesetByCategoryID(spr, categoryID)
       -- TODO
     end
 

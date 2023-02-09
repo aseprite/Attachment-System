@@ -6,5 +6,6 @@ zip Attachment-System-$version.aseprite-extension \
     LICENSE.txt \
     package.json \
     db.lua \
+    export.lua \
     imi.lua \
     plugin.lua

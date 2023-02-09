@@ -441,7 +441,8 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           end
           table.insert(referencePointsVector, ref)
           local pos = ref - Point(refCrossImage.width/2, refCrossImage.height/2)
-          tempSprite:newCel(tempLayerStates[1].layer, i, refCrossImage, pos)
+          local cel = tempSprite:newCel(tempLayerStates[1].layer, i, refCrossImage, pos)
+          cel.properties(PK).origPos = pos
         end
         tempLayerStates[1].reference = referencePointsVector
         tempLayerStates[1].referenceIsDefined = referenceIsDefinedVector
@@ -538,11 +539,13 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           local origFrame = app.activeFrame
           local origLayer = app.activeLayer
           local refTileset = find_tileset_by_categoryID(spr, originalLayer.properties(PK).categories[1])
-          app.activeLayer = tempLayerStates[1].layer
-          for tileId=1, #refTileset-1, 1 do
-            app.activeFrame = tileId
-            local pos = app.activeCel.position + Point(refCrossImage.width/2, refCrossImage.height/2)
-            refTileset:tile(tileId).properties(PK).ref = pos
+          local cels = tempLayerStates[1].layer.cels
+          for _,cel in ipairs(cels)  do
+            if cel.position ~= cel.properties(PK).origPos then
+              local tileId = cel.frameNumber
+              local pos = cel.position + Point(refCrossImage.width/2, refCrossImage.height/2)
+              refTileset:tile(tileId).properties(PK).ref = pos
+            end
           end
 
           local auxAnchorsByTile = {}

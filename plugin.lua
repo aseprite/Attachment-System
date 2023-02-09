@@ -813,7 +813,12 @@ local function create_tile_view(folders, folder,
     imi.alignFunc = nil
   end
 
-  if ts:tile(ti).properties(PK).ref == nil then
+  -- As the reference point is only in the base category, we have to
+  -- check its existence in the base category
+  local baseTileset = find_tileset_by_categoryID(activeLayer.sprite,
+                                                 activeLayer.properties(PK).categories[1])
+  if not baseTileset then baseTileset = ts end
+  if baseTileset:tile(ti).properties(PK).ref == nil then
     imi.alignFunc = function(cursor, size, lastBounds)
       return Point(lastBounds.x+lastBounds.width-size.width-2,
                    lastBounds.y+2)

@@ -168,6 +168,26 @@ local function find_tileset_by_name(spr, name)
   return nil
 end
 
+-- Gets the base tileset (the tileset assigned to the first category
+-- of the layer, or just the active tileset if the layer doesn't
+-- contain categories yet). This tileset is the one used to store the
+-- anchor/reference points per tile.
+local function get_base_tileset(layer)
+  local ts = nil
+  local layerProperties = layer.properties(PK)
+  if layerProperties.categories and #layerProperties.categories then
+    ts = db.findTilesetByCategoryID(layer.sprite,
+                                    layerProperties.categories[1])
+    if not ts then
+      ts = layer.tileset
+    end
+  else
+    ts = layer.tileset
+  end
+  return ts
+end
+
+
 local function get_folder_item_index_by_position(folder, position)
   for i=1,#folder.items do
     local itemPos = folder.items[i].position
@@ -198,6 +218,93 @@ local function find_empty_spot_position(folder, ti)
     itemPos.x = itemPos.x+1
   end
   return itemPos
+end
+
+-- Matches defined reference points <-> anchor points from parent to
+-- children
+local function align_anchors()
+  local spr = app.activeSprite
+  if not spr then return end
+
+  local hierarchy = {}
+  local function create_layers_hierarchy(layers)
+    for i=1,#layers do
+      local layer = layers[i]
+      if layer.isTilemap then
+        local layerProperties = layer.properties(PK)
+        if layerProperties.id then
+          local ts = get_base_tileset(layer)
+          local ti = 1          -- TODO use all tiles?
+          if ts:tile(ti).properties(PK).anchors then
+            for j=1,#ts:tile(ti).properties(PK).anchors do
+              local childId = ts:tile(ti).properties(PK).anchors[j].layerId
+              if childId then
+                hierarchy[childId] = layerProperties.id
+              end
+            end
+          end
+        end
+      end
+      if layer.isGroup then
+        create_layers_hierarchy(layer.layers)
+      end
+    end
+  end
+  create_layers_hierarchy(spr.layers)
+
+  local movedLayers = {}
+  local function align_layer(childId, parentId, tab)
+    local child = find_layer_by_id(spr, childId)
+    local parent = find_layer_by_id(spr, parentId)
+
+    assert(child)
+    assert(parent)
+
+    if hierarchy[parentId] then
+      align_layer(parentId, hierarchy[parentId], tab+1)
+    end
+
+    if not movedLayers[childId] then
+      table.insert(movedLayers, childId)
+
+      for fr=1,#spr.frames do
+        local parentCel = parent:cel(fr)
+        local childCel = child:cel(fr)
+        if parentCel and parentCel.image and
+           childCel and childCel.image then
+          local parentTs = get_base_tileset(parent)
+          local parentTi = parentCel.image:getPixel(0, 0)
+          local childTs = get_base_tileset(child)
+          local childTi = childCel.image:getPixel(0, 0)
+
+          local refPoint = childTs:tile(childTi).properties(PK).ref
+          if refPoint then
+            local anchorPoint = nil
+            local anchors = parentTs:tile(parentTi).properties(PK).anchors
+            for i=1,#anchors do
+              if anchors[i].layerId == childId then
+                anchorPoint = anchors[i].position
+                break
+              end
+            end
+            if anchorPoint then
+              -- Align refPoint with anchorPoint
+              childCel.position =
+                parentCel.position + anchorPoint - refPoint
+            end
+          end
+        end
+      end
+    end
+  end
+
+  app.transaction("Align Anchors",
+    function()
+      for childId,parentId in pairs(hierarchy) do
+        align_layer(childId, parentId, 0)
+      end
+      app.refresh()
+    end)
 end
 
 local function handle_drop_item_in_folder(folders,
@@ -278,11 +385,19 @@ end
 
 local function set_active_tile(ti)
   if activeLayer and activeLayer.isTilemap then
+    local ts = get_base_tileset(activeLayer)
     local cel = activeLayer:cel(app.activeFrame)
+    local oldRefPoint
+    local newRefPoint
 
     -- Change tilemap tile if are not showing categories
     -- We use Image:drawImage() to get undo information
     if activeLayer and cel and cel.image then
+      local oldTi = cel.image:getPixel(0, 0)
+      if oldTi then
+        oldRefPoint = ts:tile(oldTi).properties(PK).ref
+      end
+
       local tilemapCopy = Image(cel.image)
       tilemapCopy:putPixel(0, 0, ti)
 
@@ -295,6 +410,17 @@ local function set_active_tile(ti)
 
       cel = app.activeSprite:newCel(activeLayer, app.activeFrame, image, Point(0, 0))
     end
+
+    if ti then
+      newRefPoint = ts:tile(ti).properties(PK).ref
+    end
+
+    -- Align ref points (between old attachment and new one)
+    if oldRefPoint and newRefPoint then
+      cel.position = cel.position + oldRefPoint - newRefPoint
+    end
+
+    align_anchors()
 
     imi.repaint = true
     app.refresh()
@@ -346,93 +472,6 @@ local function find_next_attachment_usage(ti, mode)
   if prevMatch then
     app.activeCel = prevMatch
   end
-end
-
--- Matches defined reference points <-> anchor points from parent to
--- children
-local function align_anchors()
-  local spr = app.activeSprite
-  if not spr then return end
-
-  local hierarchy = {}
-  local function create_layers_hierarchy(layers)
-    for i=1,#layers do
-      local layer = layers[i]
-      if layer.isTilemap then
-        local layerProperties = layer.properties(PK)
-        if layerProperties.id then
-          local ts = layer.tileset
-          local ti = 1          -- TODO use all tiles?
-          if ts:tile(ti).properties(PK).anchors then
-            for j=1,#ts:tile(ti).properties(PK).anchors do
-              local childId = ts:tile(ti).properties(PK).anchors[j].layerId
-              if childId then
-                hierarchy[childId] = layerProperties.id
-              end
-            end
-          end
-        end
-      end
-      if layer.isGroup then
-        create_layers_hierarchy(layer.layers)
-      end
-    end
-  end
-  create_layers_hierarchy(spr.layers)
-
-  local movedLayers = {}
-  local function align_layer(childId, parentId, tab)
-    local child = find_layer_by_id(spr, childId)
-    local parent = find_layer_by_id(spr, parentId)
-
-    assert(child)
-    assert(parent)
-
-    if hierarchy[parentId] then
-      align_layer(parentId, hierarchy[parentId], tab+1)
-    end
-
-    if not movedLayers[childId] then
-      table.insert(movedLayers, childId)
-
-      for fr=1,#spr.frames do
-        local parentCel = parent:cel(fr)
-        local childCel = child:cel(fr)
-        if parentCel and parentCel.image and
-           childCel and childCel.image then
-          local parentTs = parent.tileset
-          local parentTi = parentCel.image:getPixel(0, 0)
-          local childTs = child.tileset
-          local childTi = childCel.image:getPixel(0, 0)
-
-          local refPoint = childTs:tile(childTi).properties(PK).ref
-          if refPoint then
-            local anchorPoint = nil
-            local anchors = parentTs:tile(parentTi).properties(PK).anchors
-            for i=1,#anchors do
-              if anchors[i].layerId == childId then
-                anchorPoint = anchors[i].position
-                break
-              end
-            end
-            if anchorPoint then
-              -- Align refPoint with anchorPoint
-              childCel.position =
-                parentCel.position + anchorPoint - refPoint
-            end
-          end
-        end
-      end
-    end
-  end
-
-  app.transaction("Align Anchors",
-    function()
-      for childId,parentId in pairs(hierarchy) do
-        align_layer(childId, parentId, 0)
-      end
-      app.refresh()
-    end)
 end
 
 local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
@@ -497,7 +536,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         local tempLayer = tempSprite:newLayer()
         tempLayer.name = "reference point"
         table.insert(tempLayerStates, 1, { layer=tempLayer })
-        local tileset = db.findTilesetByCategoryID(spr, originalLayer.properties(PK).categories[1])
+        local tileset = get_base_tileset(originalLayer)
         for i=1, #tileset-1, 1 do
           local ref = tileset:tile(i).properties(PK).ref
           if ref == nil then
@@ -624,7 +663,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           lockUpdateRefAnchorSelector = true
           local origFrame = app.activeFrame
           local origLayer = app.activeLayer
-          local refTileset = db.findTilesetByCategoryID(spr, originalLayer.properties(PK).categories[1])
+          local refTileset = get_base_tileset(originalLayer)
           local cels = tempLayerStates[1].layer.cels
           for _,cel in ipairs(cels)  do
             if cel.position ~= cel.properties(PK).origPos then
@@ -932,9 +971,7 @@ local function create_tile_view(folders, folder,
 
   -- As the reference point is only in the base category, we have to
   -- check its existence in the base category
-  local baseTileset = db.findTilesetByCategoryID(activeLayer.sprite,
-                                                 activeLayer.properties(PK).categories[1])
-  if not baseTileset then baseTileset = ts end
+  local baseTileset = get_base_tileset(activeLayer)
   if baseTileset:tile(ti).properties(PK).ref == nil then
     imi.alignFunc = function(cursor, size, lastBounds)
       return Point(lastBounds.x+lastBounds.width-size.width-2,

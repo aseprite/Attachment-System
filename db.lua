@@ -57,7 +57,7 @@ end
 local function createBaseSetFolder(layer)
   local items = {}
   for ti=1,#layer.tileset-1 do
-    table.insert(items, { tile=i, position=Point(ti-1, 0) })
+    table.insert(items, { tile=ti, position=Point(ti-1, 0) })
   end
   return { name=db.kBaseSetName, items=items }
 end

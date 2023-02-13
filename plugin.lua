@@ -972,6 +972,15 @@ local function create_tile_view(folders, folder,
   -- As the reference point is only in the base category, we have to
   -- check its existence in the base category
   local baseTileset = get_base_tileset(activeLayer)
+
+  -- Resize baseTileset, in case another category's tileset
+  -- was increased.
+  if baseTileset:tile(ti) == nil then
+    app.activeSprite:newTile(baseTileset, ti)
+    db.getLayerProperties(activeLayer)
+    baseTileset = get_base_tileset(activeLayer)
+  end
+
   if baseTileset:tile(ti).properties(PK).ref == nil then
     imi.alignFunc = function(cursor, size, lastBounds)
       return Point(lastBounds.x+lastBounds.width-size.width-2,

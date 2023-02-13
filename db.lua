@@ -196,8 +196,29 @@ function db.getLayerProperties(layer)
     table.insert(categories, id)
     properties.categories = categories
   end
-  if not properties.folders or #properties.folders == 0 then
+  local folders = properties.folders
+  if not folders or #folders == 0 then
     properties.folders = { createBaseSetFolder(layer) }
+  else
+    -- Update the 'items' according tileset tile count.
+    -- (Do not assign directly named properties to 'folders'
+    -- create a 'folders' copy, manipulate the copy, finally
+    -- re-assign the copy to the property)
+    local baseFolderId = 0
+    for i=1, #folders, 1 do
+      if folders[i].name == db.kBaseSetName then
+        baseFolderId = i
+        break
+      end
+    end
+    if #folders[baseFolderId].items ~= (#layer.tileset-1) then
+      local items = {}
+      for ti=1, #layer.tileset-1, 1 do
+        table.insert(items, { tile=ti, position=Point(ti-1, 0) })
+      end
+      folders[baseFolderId].items = items
+      properties.folders = folders
+    end
   end
   return properties
 end

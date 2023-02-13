@@ -190,7 +190,12 @@ function db.getLayerProperties(layer)
     layer.tileset.properties(PK).id = id
   end
   if not contains(properties.categories, id) then
-    table.insert(properties.categories, id)
+    local aux = {}
+    for i=1, #properties.categories, 1 do
+      table.insert(aux, properties.categories[i])
+    end
+    table.insert(aux, id)
+    properties.categories = aux
   end
   if not properties.folders or #properties.folders == 0 then
     properties.folders = { createBaseSetFolder(layer) }

@@ -474,14 +474,66 @@ local function find_next_attachment_usage(ti, mode)
   end
 end
 
+local function find_items_by_tile(folder, tileId)
+  local items = {}
+  for i=1, #folder.items, 1 do
+    if folder.items[i].tile == tileId then
+      table.insert(items, folder.items[i])
+    end
+  end
+  return items
+end
+
+local function remove_tile_via_index_from_folder(folder, indexInFolder)
+  local tiRow = folder.items[indexInFolder].position.y
+  local tiColumn = folder.items[indexInFolder].position.x
+  table.remove(folder.items, indexInFolder)
+  for j=#folder.items,1,-1 do
+    if folder.items[j].position.y == tiRow and
+      folder.items[j].position.x > tiColumn then
+      folder.items[j].position.x = folder.items[j].position.x - 1
+    end
+  end
+end
+
+local function remove_tiles_from_folders(folders, ti)
+  for i=1,#folders, 1 do
+    local folder = folders[i]
+    local ti_items = find_items_by_tile(folder, ti)
+    if #ti_items == 0 then
+      for j=#folder.items,1,-1 do
+        if folder.items[j].tile > ti then
+          folder.items[j].tile = folder.items[j].tile - 1
+        end
+      end
+    else
+      for j=1, #ti_items, 1 do
+        local tiRow = ti_items[j].position.y
+        local tiColumn = ti_items[j].position.x
+        for k=#folder.items,1,-1 do
+          if folder.items[k].position.y == tiRow and
+            folder.items[k].position.x > tiColumn then
+            folder.items[k].position.x = folder.items[k].position.x - 1
+          end
+        end
+      end
+      for j=#folder.items,1,-1 do
+        if folder.items[j].tile == ti then
+          table.remove(folder.items, j)
+        elseif folder.items[j].tile > ti then
+          folder.items[j].tile = folder.items[j].tile - 1
+        end
+      end
+    end
+  end
+end
+
 local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   local popup = Dialog{ parent=imi.dlg }
   local spr = activeLayer.sprite
 
   -- Variables and Functions associated to editAnchors() and editAttachment()
-
   local originalLayer = activeLayer
-  local layerEditableStates = {}
 
   local function editAnchors()
     create_cross_images(spr.colorMode)
@@ -751,7 +803,6 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
   local function editAttachment()
     originalLayer = activeLayer
-    layerEditableStates = {}
     dlgSkipOnCloseFun = true
     dlg:close()
 
@@ -859,11 +910,33 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     popup:close()
   end
 
+  local function is_unused_tile(tileIndex)
+    return tilesHistogram[tileIndex] == nil
+  end
+
   local function delete()
-    table.remove(folder.items, indexInFolder)
-    app.transaction("Delete Attachment from Folder", function()
-     activeLayer.properties(PK).folders = folders
-    end)
+    app.transaction(
+      function()
+        if db.isBaseSetFolder(folder) and is_unused_tile(ti) then
+          forEachCategoryTileset(
+            function(ts)
+              spr:deleteTile(ts, ti)
+            end)
+
+          -- TODO remap tiles, should this be included in spr:deleteTile()
+          remap_tiles_in_tilemap_layer_delete_index(activeLayer, ti)
+        end
+
+        if db.isBaseSetFolder(folder) then -- is_unused_tile(ti) == implicit true (Delete option hidden for used tiles)
+          remove_tiles_from_folders(folders, ti)
+        else
+          remove_tile_via_index_from_folder(folder, indexInFolder)
+        end
+        activeLayer.properties(PK).folders = folders
+        if ti >= #ts then
+          ti = #ts - 1
+        end
+      end)
     popup:close()
   end
 
@@ -879,10 +952,6 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
       end
     end
     app.range.frames = frames
-  end
-
-  local function is_unused_tile(tileIndex)
-    return tilesHistogram[tileIndex] == nil
   end
 
   popup:menuItem{ text="Edit &Anchors", onclick=editAnchors }:newrow()

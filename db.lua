@@ -7,7 +7,7 @@
 -- Extension Properties:
 --
 -- Sprite = {
---   version = 3
+--   version = 4
 -- }
 --
 -- Tileset = {            -- A tileset represents a category for one layer
@@ -39,7 +39,7 @@ local db = {
   PK = "aseprite/Attachment-System",
 
   -- Version of the database (DB)
-  kLatestDBVersion = 3,
+  kLatestDBVersion = 4,
   kBaseSetName = "Base Set",
 }
 
@@ -222,6 +222,11 @@ function db.setupSprite(spr)
 
   -- Latest version in the sprite
   spr.properties(PK).version = db.kLatestDBVersion
+
+  -- Introduced in version=4
+  if spr.tileManagementPlugin ~= PK then
+    spr.tileManagementPlugin = PK
+  end
 end
 
 return db

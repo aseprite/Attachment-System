@@ -97,7 +97,7 @@ local function initVars(ctx)
   imi.margin = 4*imi.uiScale
 
   -- List of widget IDs inside mousePos, useful to send mouse events
-  -- in order, the order in this table is from from the backmost
+  -- in order, the order in this table is from the backmost
   -- widget to the frontmost one, but it's iterated reversely to go
   -- from front to back.
   imi.mouseWidgets = {}
@@ -494,6 +494,24 @@ function imi.onmousedown(ev)
   imi.repaint = false
 
   local mouseWidgets = imi.mouseWidgets
+  -- Adjust the mouseWidgets stack to fix wrong tile drag instead of
+  -- scroll bar drag when tile and scroll bar overlap
+  for i=#mouseWidgets, 2, -1 do
+    local aboveWidget = mouseWidgets[i]
+    local underWidget = mouseWidgets[i-1] -- looking for a viewport with scrollbars
+    -- if widget.viewportSize ~= nil implies that
+    -- the widget corresponds to a viewport with scrollbars
+    if underWidget.viewportSize and not aboveWidget.viewportSize then
+      local viewportBounds = Rectangle(underWidget.bounds.origin,
+                                       underWidget.viewportSize)
+      if not viewportBounds:contains(imi.mousePos) then
+        while i <= #mouseWidgets do
+          table.remove(mouseWidgets, #mouseWidgets)
+        end
+      end
+    end
+  end
+
   for i=#mouseWidgets,1,-1 do
     local widget = mouseWidgets[i]
     assert(widget ~= nil)

@@ -484,6 +484,16 @@ local function find_folder_items_by_tile(folder, tileId)
   return items
 end
 
+local function count_folder_items_with_tile(folder, tileId)
+  local count = 0
+  for i=1, #folder.items, 1 do
+    if folder.items[i].tile == tileId then
+      count = count + 1
+    end
+  end
+  return count
+end
+
 local function remove_tile_from_folder_by_index(folder, indexInFolder)
   local tiRow = folder.items[indexInFolder].position.y
   local tiColumn = folder.items[indexInFolder].position.x
@@ -962,16 +972,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   popup:menuItem{ text="Find &prev usage", onclick=function() find_next_attachment_usage(ti, MODE_BACKWARDS) end }:newrow()
   local repeatedTiOnBaseFolder = false
   if folder and db.isBaseSetFolder(folder) then
-    local count = 0
-    for i=1, #folder.items, 1 do
-      if folder.items[i].tile == ti then
-        count = count + 1
-        if count > 1 then
-          repeatedTiOnBaseFolder = true
-          break
-        end
-      end
-    end
+    repeatedTiOnBaseFolder = (count_folder_items_with_tile(folder, ti) > 1)
   end
   if folder and (not db.isBaseSetFolder(folder) or
                  repeatedTiOnBaseFolder or

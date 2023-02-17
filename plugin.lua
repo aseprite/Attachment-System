@@ -914,10 +914,11 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     return tilesHistogram[tileIndex] == nil
   end
 
-  local function delete()
+  local function delete(repeatedTiOnBaseFolder)
     app.transaction(
       function()
-        if db.isBaseSetFolder(folder) and is_unused_tile(ti) then
+        if db.isBaseSetFolder(folder) and
+           not repeatedTiOnBaseFolder and is_unused_tile(ti) then
           forEachCategoryTileset(
             function(ts)
               spr:deleteTile(ts, ti)
@@ -925,9 +926,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
           -- Remap tiles in all tilemaps
           remap_tiles_in_tilemap_layer_delete_index(activeLayer, ti)
-        end
 
-        if db.isBaseSetFolder(folder) then -- is_unused_tile(ti) == implicit true (Delete option hidden for used tiles)
           remove_tiles_from_folders(folders, ti)
         else
           remove_tile_from_folder_by_index(folder, indexInFolder)
@@ -961,9 +960,24 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   popup:menuItem{ text="Select &usage", onclick=selectFrames }:newrow()
   popup:menuItem{ text="Find &next usage", onclick=function() find_next_attachment_usage(ti, MODE_FORWARD) end }:newrow()
   popup:menuItem{ text="Find &prev usage", onclick=function() find_next_attachment_usage(ti, MODE_BACKWARDS) end }:newrow()
-  if folder and (not db.isBaseSetFolder(folder) or is_unused_tile(ti)) then
+  local repeatedTiOnBaseFolder = false
+  if folder and db.isBaseSetFolder(folder) then
+    local count = 0
+    for i=1, #folder.items, 1 do
+      if folder.items[i].tile == ti then
+        count = count + 1
+        if count > 1 then
+          repeatedTiOnBaseFolder = true
+          break
+        end
+      end
+    end
+  end
+  if folder and (not db.isBaseSetFolder(folder) or
+                 repeatedTiOnBaseFolder or
+                 is_unused_tile(ti)) then
     popup:separator()
-    popup:menuItem{ text="&Delete", onclick=delete }
+    popup:menuItem{ text="&Delete", onclick=function() delete(repeatedTiOnBaseFolder) end }
   end
   popup:showMenu()
   imi.repaint = true

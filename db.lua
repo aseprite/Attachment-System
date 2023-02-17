@@ -55,6 +55,9 @@ local function contains(t, item)
 end
 
 local function createBaseSetFolder(layer)
+  if #layer.tileset == 1 then
+    layer.sprite:newTile(layer.tileset, 1)
+  end
   local items = {}
   for ti=1,#layer.tileset-1 do
     table.insert(items, { tile=ti, position=Point(ti-1, 0) })

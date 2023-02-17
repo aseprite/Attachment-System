@@ -103,6 +103,9 @@ local function calculate_shrunken_bounds(tilemapLayer)
     local tileImg = ts:getTile(i)
     bounds = bounds:union(tileImg:shrinkBounds())
   end
+  if bounds.width <= 1 and bounds.height <= 1 then
+    return Rectangle(0, 0, 40, 40)
+  end
   return bounds
 end
 

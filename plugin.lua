@@ -1621,8 +1621,9 @@ local function canvas_ontouchmagnify(ev)
   dlg:repaint()
 end
 
--- TODO this can be called from a background thread when we apply an
---      filter/effect to the tiles (called from Aseprite function
+-- TODO This event was removed from Aseprite, because it was called
+--      from a background in some cases (e.g. apply an filter/effect
+--      to the tiles, called from Aseprite function
 --      remove_unused_tiles_from_tileset())
 local function Sprite_remaptileset(ev)
   -- If the action came from an undo/redo, the properties are restored
@@ -1665,7 +1666,7 @@ end
 local function unobserve_sprite()
   if observedSprite then
     observedSprite.events:off(Sprite_change)
-    observedSprite.events:off(Sprite_remaptileset)
+    --observedSprite.events:off(Sprite_remaptileset)
     observedSprite = nil
   end
 end
@@ -1675,7 +1676,7 @@ local function observe_sprite(spr)
   observedSprite = spr
   if observedSprite then
     observedSprite.events:on('change', Sprite_change)
-    observedSprite.events:on('remaptileset', Sprite_remaptileset)
+    --observedSprite.events:on('remaptileset', Sprite_remaptileset)
   end
 end
 

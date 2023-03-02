@@ -31,7 +31,7 @@ local tempLayerStates = {}
 local anchorCrossImage  -- crosshair to anchor points -full opacity-
 local refCrossImage
 local dlgSkipOnCloseFun = false -- flag to avoid 'onclose' actions of 'dlg' Attachment Window (to act as dlg:modify{visible=false}).
-local tempSprite
+local tempSprite = nil
 local childTileSelected = 1 -- temporary child tile to display during anchor editing
 local lockUpdateRefAnchorSelector = false -- flag to lock the update of Ref/Anchor selector comboBox
 
@@ -628,6 +628,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           lockUpdateRefAnchorSelector = true
           if tempSprite ~= nil then
             tempSprite:close()
+            tempSprite = nil
           end
           if newAnchorDlg ~= nil then
             newAnchorDlg:close()
@@ -637,7 +638,6 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           app.preferences.editor.auto_select_layer_quick = originalPreferences.auto_select_layer_quick
           app.activeTool = originalTool
           app.activeLayer = originalLayer
-          dlg:show { wait=false }
           lockUpdateRefAnchorSelector = false
           dlgSkipOnCloseFun = false
         end
@@ -858,7 +858,6 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         anchorActionsDlg.bounds = Rectangle(0, 0, anchorActionsDlg.bounds.width, anchorActionsDlg.bounds.height)
         popup:close()
         dlgSkipOnCloseFun = true
-        dlg:close()
         lockUpdateRefAnchorSelector = false
       end)
   end
@@ -866,14 +865,13 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   local function editAttachment()
     originalLayer = activeLayer
     dlgSkipOnCloseFun = true
-    dlg:close()
 
     local function cancel()
       if tempSprite ~= nil then
         tempSprite:close()
+        tempSprite = nil
       end
       dlgSkipOnCloseFun = false
-      dlg:show{ wait=false }
     end
 
     local editAttachmentDlg = Dialog{ title="Edit Attachment", onclose=cancel }
@@ -1324,6 +1322,8 @@ local function imi_ongui()
 
     imi.ctx.color = app.theme.color.text
     imi.label("No sprite")
+  elseif spr == tempSprite then
+    --do nothing
   elseif not spr.properties(PK).version or
          spr.properties(PK).version < db.kLatestDBVersion then
     local label

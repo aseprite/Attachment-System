@@ -143,18 +143,25 @@ local function remap_tiles_in_tilemap_layer_delete_index(tilemapLayer, deleteTi)
   end
 end
 
-local function find_layer_by_id(spr, id)
-  for _,layer in ipairs(spr.layers) do
-    if layer.isTilemap and layer.properties(PK).id == id then
+local function find_layer_by_id(layers, id)
+  for _,layer in ipairs(layers) do
+    if layer.isGroup then
+      local result = find_layer_by_id(layer.layers, id)
+      if result then return result end
+    elseif layer.isTilemap and
+           layer.properties(PK).id == id then
       return layer
     end
   end
   return nil
 end
 
-local function find_layer_by_name(spr, name)
-  for _,layer in ipairs(spr.layers) do
-    if layer.name == name then
+local function find_layer_by_name(layers, name)
+  for _,layer in ipairs(layers) do
+    if layer.isGroup then
+      local result = find_layer_by_name(layer.layers, name)
+      if result then return result end
+    elseif layer.name == name then
       return layer
     end
   end
@@ -257,8 +264,8 @@ local function align_anchors()
 
   local movedLayers = {}
   local function align_layer(childId, parentId, tab)
-    local child = find_layer_by_id(spr, childId)
-    local parent = find_layer_by_id(spr, parentId)
+    local child = find_layer_by_id(spr.layers, childId)
+    local parent = find_layer_by_id(spr.layers, parentId)
 
     assert(child)
     assert(parent)
@@ -580,7 +587,8 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           -- Create the layers
           for i=1, #ts:tile(ti).properties(PK).anchors, 1 do
             table.insert(tempLayerStates, { layer=tempSprite:newLayer() })
-            auxLayer = find_layer_by_id(spr, ts:tile(ti).properties(PK).anchors[i].layerId)
+            auxLayer = find_layer_by_id(spr.layers,
+                                        ts:tile(ti).properties(PK).anchors[i].layerId)
             if auxLayer ~= nil then
               tempLayerStates[#tempLayerStates].layer.name = auxLayer.name
             else
@@ -634,16 +642,52 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           dlgSkipOnCloseFun = false
         end
 
-        local function generateChildrenOptions()
-          local options = { "no child" }
-          for _,layer in ipairs(spr.layers) do
-            if layer.isTilemap and layer ~= originalLayer then
+        local function addChildrenOptions(layers, options)
+          for _,layer in ipairs(layers) do
+            if layer.isGroup then
+              addChildrenOptions(layer.layers, options)
+            elseif layer.isTilemap and layer ~= originalLayer then
               table.insert(options, layer.name)
             end
           end
+        end
+
+        local function generateUsedAnchorIds(layers, anchorLayerIds)
+          for _,layer in ipairs(layers) do
+            if layer ~= originalLayer then
+              if layer.isGroup then
+                generateUsedAnchorIds(layer.layers, anchorLayerIds)
+              elseif layer.isTilemap and layer.tileset:tile(1) and
+                layer.tileset:tile(1).properties(PK).anchors then
+                local anchors = layer.tileset:tile(1).properties(PK).anchors
+                for i=1, #anchors, 1 do
+                  table.insert(anchorLayerIds, anchors[i].layerId)
+                end
+              end
+            end
+          end
+        end
+
+        local function generateChildrenOptions()
+          local options = { "no child" }
+          addChildrenOptions(spr.layers, options)
           for i=2, #tempLayerStates, 1 do
             for j=2, #options, 1 do
               if tempLayerStates[i].layer.name == options[j] then
+                table.remove(options, j)
+                break
+              end
+            end
+          end
+          -- Summarize child layer id's used on other tilemaps
+          local anchorLayerIds = {}
+          generateUsedAnchorIds(spr.layers, anchorLayerIds)
+          -- Remove used child options from 'options'
+          for i=1, #anchorLayerIds, 1 do
+            local layerFound = find_layer_by_id(spr.layers,
+                                                anchorLayerIds[i])
+            for j=1, #options, 1 do
+              if layerFound.name == options[j] then
                 table.remove(options, j)
                 break
               end
@@ -670,7 +714,8 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         local function onChangeSelection()
           if not(blockComboOnchange) then
             lockUpdateRefAnchorSelector = true
-            local layer = find_layer_by_name(tempSprite, anchorActionsDlg.data.combo)
+            local layer = find_layer_by_name(tempSprite.layers,
+                                             anchorActionsDlg.data.combo)
             app.activeLayer = layer
             lockUpdateRefAnchorSelector = false
           end
@@ -741,7 +786,9 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           local auxAnchorsByTile = {}
           local auxLayerIds = {}
           for i=2, #tempLayerStates, 1 do
-            local layerId = find_layer_by_name(spr, tempLayerStates[i].layer.name).properties(PK).id
+            local layerId =
+              find_layer_by_name(spr.layers,
+                                 tempLayerStates[i].layer.name).properties(PK).id
             table.insert(auxLayerIds, layerId)
           end
 
@@ -772,7 +819,9 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
         local function removeAnchorPoint()
           lockUpdateRefAnchorSelector = true
-          local layerToRemove = find_layer_by_name(tempSprite, anchorActionsDlg.data.combo)
+          local layerToRemove =
+            find_layer_by_name(tempSprite.layers,
+                               anchorActionsDlg.data.combo)
           if tempLayerStates[1].layer == layerToRemove then return end
           for i=2, #tempLayerStates, 1 do
             if tempLayerStates[i].layer == layerToRemove then

@@ -934,6 +934,12 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   end
 
   local function newEmpty()
+    local auxAnchors = {}
+    local defaultPos = Point(ts.grid.tileSize.width/2, ts.grid.tileSize.height/2)
+    for i=1, #ts:tile(1).properties(PK).anchors, 1 do
+      table.insert(auxAnchors, {layerId=ts:tile(1).properties(PK).anchors[i].layerId,
+                                position=defaultPos})
+    end
     app.transaction("New Empty Attachment",
       function()
         local tile
@@ -945,6 +951,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
             else
               assert(t.index == t.index)
             end
+            tile.properties(PK).anchors = auxAnchors
           end)
 
         if tile then
@@ -964,7 +971,10 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
             tile = spr:newTile(ts)
             tile.image:clear()
             tile.image:drawImage(ts:tile(ti).image)
+            tile.properties(PK).anchors = ts:tile(ti).properties(PK).anchors
         end)
+        local refTileset = get_base_tileset(activeLayer)
+        refTileset:tile(#refTileset-1).properties(PK).ref = refTileset:tile(ti).properties(PK).ref
         if tile then
           addInFolderAndBaseSet(tile.index)
         end

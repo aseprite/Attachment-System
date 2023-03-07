@@ -557,224 +557,243 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
   local function editAnchors()
     create_cross_images(spr.colorMode)
+    tempLayers = {}
+    tempLayerStates = {}
+    local selectionOptions = { "reference point" }
+    local newAnchorDlg = nil
+    lockUpdateRefAnchorSelector = true
+    tempSprite = Sprite(ts:tile(ti).image.width, ts:tile(ti).image.height, spr.colorMode)
+    local originalPreferences = { auto_select_layer=app.preferences.editor.auto_select_layer,
+                                  auto_select_layer_quick=app.preferences.editor.auto_select_layer_quick }
+    local originalTool = app.activeTool.id
+    app.activeTool = "move"
+    app.preferences.editor.auto_select_layer = false
+    app.preferences.editor.auto_select_layer_quick = true
+    local palette = spr.palettes[1]
+    tempSprite.palettes[1]:resize(#palette)
+    for i=0, #palette-1, 1 do
+      tempSprite.palettes[1]:setColor(i, palette:getColor(i))
+    end
+    for i=1, #ts-1, 1 do
+      tempSprite:newCel(app.activeLayer, i, ts:tile(i).image, Point(0, 0))
+      tempSprite:newEmptyFrame()
+    end
+    tempSprite:deleteFrame(#ts)
+    -- Load all the anchors in all the tiles
+    if ts:tile(ti).properties(PK).anchors ~= nil then
+      -- Create the layers
+      for i=1, #ts:tile(ti).properties(PK).anchors, 1 do
+        table.insert(tempLayerStates, { layer=tempSprite:newLayer() })
+        auxLayer = find_layer_by_id(spr.layers,
+                                    ts:tile(ti).properties(PK).anchors[i].layerId)
+        if auxLayer ~= nil then
+          tempLayerStates[#tempLayerStates].layer.name = auxLayer.name
+        else
+          tempLayerStates[#tempLayerStates].layer.name = "anchor " .. i
+        end
+      end
+      for i=1, #ts-1, 1 do
+        for j=1, #ts:tile(ti).properties(PK).anchors, 1 do
+          local pos = ts:tile(i).properties(PK).anchors[j].position -
+                      Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
+          tempSprite:newCel(tempLayerStates[j].layer, i, anchorCrossImage, pos)
+        end
+      end
+    end
 
-    app.transaction("Edit Anchors",
-      function()
-        tempLayers = {}
-        tempLayerStates = {}
-        local selectionOptions = { "reference point" }
-        local newAnchorDlg = nil
+    -- Create the reference point Layer, it should be always on top of the stack layers and
+    -- it will be first element on the tempLayers vector
+    local tempLayer = tempSprite:newLayer()
+    tempLayer.name = "reference point"
+    table.insert(tempLayerStates, 1, { layer=tempLayer })
+    local tileset = get_base_tileset(originalLayer)
+    for i=1, #tileset-1, 1 do
+      local ref = tileset:tile(i).properties(PK).ref
+      if ref == nil then
+        ref = Point(ts:tile(i).image.width/2, ts:tile(i).image.height/2)
+      else
+        ref = tileset:tile(i).properties(PK).ref
+      end
+      local pos = ref - Point(refCrossImage.width/2, refCrossImage.height/2)
+      local cel = tempSprite:newCel(tempLayer, i, refCrossImage, pos)
+      cel.properties(PK).origPos = pos
+    end
+    app.activeFrame = ti
+    lockUpdateRefAnchorSelector = false
+
+    local function cancel()
+      lockUpdateRefAnchorSelector = true
+      if tempSprite ~= nil then
+        tempSprite:close()
+      end
+      if newAnchorDlg ~= nil then
+        newAnchorDlg:close()
+      end
+      app.activeSprite = spr
+      app.preferences.editor.auto_select_layer = originalPreferences.auto_select_layer
+      app.preferences.editor.auto_select_layer_quick = originalPreferences.auto_select_layer_quick
+      app.activeTool = originalTool
+      app.activeLayer = originalLayer
+      dlg:show { wait=false }
+      lockUpdateRefAnchorSelector = false
+      dlgSkipOnCloseFun = false
+    end
+
+    local function addChildrenOptions(layers, options)
+      for _,layer in ipairs(layers) do
+        if layer.isGroup then
+          addChildrenOptions(layer.layers, options)
+        elseif layer.isTilemap and layer ~= originalLayer then
+          table.insert(options, layer.name)
+        end
+      end
+    end
+
+    local function generateUsedAnchorIds(layers, anchorLayerIds)
+      for _,layer in ipairs(layers) do
+        if layer ~= originalLayer then
+          if layer.isGroup then
+            generateUsedAnchorIds(layer.layers, anchorLayerIds)
+          elseif layer.isTilemap and layer.tileset:tile(1) and
+            layer.tileset:tile(1).properties(PK).anchors then
+            local anchors = layer.tileset:tile(1).properties(PK).anchors
+            for i=1, #anchors, 1 do
+              table.insert(anchorLayerIds, anchors[i].layerId)
+            end
+          end
+        end
+      end
+    end
+
+    local function generateChildrenOptions()
+      local options = { "no child" }
+      addChildrenOptions(spr.layers, options)
+      for i=2, #tempLayerStates, 1 do
+        for j=2, #options, 1 do
+          if tempLayerStates[i].layer.name == options[j] then
+            table.remove(options, j)
+            break
+          end
+        end
+      end
+      -- Summarize child layer id's used on other tilemaps
+      local anchorLayerIds = {}
+      generateUsedAnchorIds(spr.layers, anchorLayerIds)
+      -- Remove used child options from 'options'
+      for i=1, #anchorLayerIds, 1 do
+        local layerFound = find_layer_by_id(spr.layers,
+                                            anchorLayerIds[i])
+        for j=1, #options, 1 do
+          if layerFound.name == options[j] then
+            table.remove(options, j)
+            break
+          end
+        end
+      end
+      return options
+    end
+
+    local function generateSelectionOptions()
+      local options = {}
+      for i=1, #tempLayerStates, 1 do
+        table.insert(options, tempLayerStates[i].layer.name)
+      end
+      return options
+    end
+
+    lockUpdateRefAnchorSelector = true
+    anchorActionsDlg = Dialog { title="Ref/Anchor Editor",
+                                onclose=cancel }
+    local blockComboOnchange = false
+    newAnchorDlg = Dialog { title="Select Child"}
+    lockUpdateRefAnchorSelector = false
+
+    local function onChangeSelection()
+      if not(blockComboOnchange) then
         lockUpdateRefAnchorSelector = true
-        tempSprite = Sprite(ts:tile(ti).image.width, ts:tile(ti).image.height, spr.colorMode)
-        local originalPreferences = { auto_select_layer=app.preferences.editor.auto_select_layer,
-                                      auto_select_layer_quick=app.preferences.editor.auto_select_layer_quick }
-        local originalTool = app.activeTool.id
-        app.activeTool = "move"
-        app.preferences.editor.auto_select_layer = false
-        app.preferences.editor.auto_select_layer_quick = true
-        local palette = spr.palettes[1]
-        tempSprite.palettes[1]:resize(#palette)
-        for i=0, #palette-1, 1 do
-          tempSprite.palettes[1]:setColor(i, palette:getColor(i))
-        end
-        for i=1, #ts-1, 1 do
-          tempSprite:newCel(app.activeLayer, i, ts:tile(i).image, Point(0, 0))
-          tempSprite:newEmptyFrame()
-        end
-        tempSprite:deleteFrame(#ts)
-        -- Load all the anchors in all the tiles
-        if ts:tile(ti).properties(PK).anchors ~= nil then
-          -- Create the layers
-          for i=1, #ts:tile(ti).properties(PK).anchors, 1 do
-            table.insert(tempLayerStates, { layer=tempSprite:newLayer() })
-            auxLayer = find_layer_by_id(spr.layers,
-                                        ts:tile(ti).properties(PK).anchors[i].layerId)
-            if auxLayer ~= nil then
-              tempLayerStates[#tempLayerStates].layer.name = auxLayer.name
-            else
-              tempLayerStates[#tempLayerStates].layer.name = "anchor " .. i
-            end
-          end
-          for i=1, #ts-1, 1 do
-            for j=1, #ts:tile(ti).properties(PK).anchors, 1 do
-              local pos = ts:tile(i).properties(PK).anchors[j].position -
-                          Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
-              tempSprite:newCel(tempLayerStates[j].layer, i, anchorCrossImage, pos)
-            end
-          end
-        end
+        local layer = find_layer_by_name(tempSprite.layers,
+                                          anchorActionsDlg.data.combo)
+        app.activeLayer = layer
+        lockUpdateRefAnchorSelector = false
+      end
+    end
 
-        -- Create the reference point Layer, it should be always on top of the stack layers and
-        -- it will be first element on the tempLayers vector
+    local function addAnchorPoint()
+      lockUpdateRefAnchorSelector = true
+      if newAnchorDlg ~= nil then
+        newAnchorDlg:close()
+      end
+      local function addLayerToAllowNewAnchor()
         local tempLayer = tempSprite:newLayer()
-        tempLayer.name = "reference point"
-        table.insert(tempLayerStates, 1, { layer=tempLayer })
-        local tileset = get_base_tileset(originalLayer)
-        for i=1, #tileset-1, 1 do
-          local ref = tileset:tile(i).properties(PK).ref
-          if ref == nil then
-            ref = Point(ts:tile(i).image.width/2, ts:tile(i).image.height/2)
-          else
-            ref = tileset:tile(i).properties(PK).ref
-          end
-          local pos = ref - Point(refCrossImage.width/2, refCrossImage.height/2)
-          local cel = tempSprite:newCel(tempLayer, i, refCrossImage, pos)
-          cel.properties(PK).origPos = pos
-        end
-        app.activeFrame = ti
-        lockUpdateRefAnchorSelector = false
+        tempLayer.name = newAnchorDlg.data.childBox
 
-        local function cancel()
-          lockUpdateRefAnchorSelector = true
-          if tempSprite ~= nil then
-            tempSprite:close()
-          end
-          if newAnchorDlg ~= nil then
-            newAnchorDlg:close()
-          end
-          app.activeSprite = spr
-          app.preferences.editor.auto_select_layer = originalPreferences.auto_select_layer
-          app.preferences.editor.auto_select_layer_quick = originalPreferences.auto_select_layer_quick
-          app.activeTool = originalTool
-          app.activeLayer = originalLayer
-          dlg:show { wait=false }
-          lockUpdateRefAnchorSelector = false
-          dlgSkipOnCloseFun = false
+        table.insert(tempLayerStates, { layer=tempLayer })
+        tempLayerStates[1].layer.stackIndex = tempLayer.stackIndex
+
+        app.activeLayer = tempLayer
+        local pos = Point(tempSprite.width/2, tempSprite.height/2)
+                    - Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
+        for i=1,#tempSprite.frames do
+          tempSprite:newCel(tempLayer, i, anchorCrossImage, pos)
         end
 
-        local function addChildrenOptions(layers, options)
-          for _,layer in ipairs(layers) do
-            if layer.isGroup then
-              addChildrenOptions(layer.layers, options)
-            elseif layer.isTilemap and layer ~= originalLayer then
-              table.insert(options, layer.name)
-            end
-          end
+        local selectionOptions = generateSelectionOptions()
+        blockComboOnchange = true
+        anchorActionsDlg:modify{ id="combo",
+                                  option=tempLayer.name,
+                                  options=selectionOptions }
+        blockComboOnchange = false
+        app.refresh()
+      end
+
+      local childrenOptions = generateChildrenOptions()
+      newAnchorDlg = Dialog { title="Select Child"}
+      newAnchorDlg:combobox { id="childBox",
+                              option="no child",
+                              options=childrenOptions,
+                              onchange= function()
+                                          addLayerToAllowNewAnchor()
+                                          newAnchorDlg:close()
+                                        end }
+      newAnchorDlg:show { wait=false }
+      local x = anchorActionsDlg.bounds.x + anchorActionsDlg.bounds.width
+      local y = anchorActionsDlg.bounds.y + 15*imi.uiScale
+      newAnchorDlg.bounds = Rectangle(x, y, newAnchorDlg.bounds.width, newAnchorDlg.bounds.height)
+      lockUpdateRefAnchorSelector = false
+    end
+
+    local function acceptPoints()
+      lockUpdateRefAnchorSelector = true
+      local origFrame = app.activeFrame
+      local origLayer = app.activeLayer
+      local refTileset = get_base_tileset(originalLayer)
+      local cels = tempLayerStates[1].layer.cels
+
+      -- Process all anchors in one array 'auxAnchorsByTile'
+      local auxAnchorsByTile = {}
+      local auxLayerIds = {}
+      for i=2, #tempLayerStates, 1 do
+        local layerId =
+          find_layer_by_name(spr.layers,
+                              tempLayerStates[i].layer.name).properties(PK).id
+        table.insert(auxLayerIds, layerId)
+      end
+      for tileId=1, #refTileset-1, 1 do
+        local auxAnchors = {}
+        app.activeFrame = tileId
+        for i=1, #auxLayerIds, 1 do
+          app.activeLayer = tempLayerStates[i+1].layer
+          local cel = app.activeCel
+          local pos = cel.position + Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
+          table.insert(auxAnchors, {layerId=auxLayerIds[i], position=pos})
         end
+        table.insert(auxAnchorsByTile, auxAnchors)
+      end
 
-        local function generateUsedAnchorIds(layers, anchorLayerIds)
-          for _,layer in ipairs(layers) do
-            if layer ~= originalLayer then
-              if layer.isGroup then
-                generateUsedAnchorIds(layer.layers, anchorLayerIds)
-              elseif layer.isTilemap and layer.tileset:tile(1) and
-                layer.tileset:tile(1).properties(PK).anchors then
-                local anchors = layer.tileset:tile(1).properties(PK).anchors
-                for i=1, #anchors, 1 do
-                  table.insert(anchorLayerIds, anchors[i].layerId)
-                end
-              end
-            end
-          end
-        end
-
-        local function generateChildrenOptions()
-          local options = { "no child" }
-          addChildrenOptions(spr.layers, options)
-          for i=2, #tempLayerStates, 1 do
-            for j=2, #options, 1 do
-              if tempLayerStates[i].layer.name == options[j] then
-                table.remove(options, j)
-                break
-              end
-            end
-          end
-          -- Summarize child layer id's used on other tilemaps
-          local anchorLayerIds = {}
-          generateUsedAnchorIds(spr.layers, anchorLayerIds)
-          -- Remove used child options from 'options'
-          for i=1, #anchorLayerIds, 1 do
-            local layerFound = find_layer_by_id(spr.layers,
-                                                anchorLayerIds[i])
-            for j=1, #options, 1 do
-              if layerFound.name == options[j] then
-                table.remove(options, j)
-                break
-              end
-            end
-          end
-          return options
-        end
-
-        local function generateSelectionOptions()
-          local options = {}
-          for i=1, #tempLayerStates, 1 do
-            table.insert(options, tempLayerStates[i].layer.name)
-          end
-          return options
-        end
-
-        lockUpdateRefAnchorSelector = true
-        anchorActionsDlg = Dialog { title="Ref/Anchor Editor",
-                                    onclose=cancel }
-        local blockComboOnchange = false
-        newAnchorDlg = Dialog { title="Select Child"}
-        lockUpdateRefAnchorSelector = false
-
-        local function onChangeSelection()
-          if not(blockComboOnchange) then
-            lockUpdateRefAnchorSelector = true
-            local layer = find_layer_by_name(tempSprite.layers,
-                                             anchorActionsDlg.data.combo)
-            app.activeLayer = layer
-            lockUpdateRefAnchorSelector = false
-          end
-        end
-
-        local function addAnchorPoint()
-          lockUpdateRefAnchorSelector = true
-          if newAnchorDlg ~= nil then
-            newAnchorDlg:close()
-          end
-          local function addLayerToAllowNewAnchor()
-            local tempLayer = tempSprite:newLayer()
-            tempLayer.name = newAnchorDlg.data.childBox
-
-            table.insert(tempLayerStates, { layer=tempLayer })
-            tempLayerStates[1].layer.stackIndex = tempLayer.stackIndex
-
-            app.activeLayer = tempLayer
-            local pos = Point(tempSprite.width/2, tempSprite.height/2)
-                        - Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
-            for i=1,#tempSprite.frames do
-              tempSprite:newCel(tempLayer, i, anchorCrossImage, pos)
-            end
-
-            local selectionOptions = generateSelectionOptions()
-            blockComboOnchange = true
-            anchorActionsDlg:modify{ id="combo",
-                                     option=tempLayer.name,
-                                     options=selectionOptions }
-            blockComboOnchange = false
-            app.refresh()
-          end
-
-          local childrenOptions = generateChildrenOptions()
-          newAnchorDlg = Dialog { title="Select Child"}
-          newAnchorDlg:combobox { id="childBox",
-                                  option="no child",
-                                  options=childrenOptions,
-                                  onchange= function()
-                                              addLayerToAllowNewAnchor()
-                                              newAnchorDlg:close()
-                                            end }
-          newAnchorDlg:show { wait=false }
-          local x = anchorActionsDlg.bounds.x + anchorActionsDlg.bounds.width
-          local y = anchorActionsDlg.bounds.y + 15*imi.uiScale
-          newAnchorDlg.bounds = Rectangle(x, y, newAnchorDlg.bounds.width, newAnchorDlg.bounds.height)
-          lockUpdateRefAnchorSelector = false
-        end
-
-        local function backToSprite()
-          anchorActionsDlg:close()
-        end
-
-        local function acceptPoints()
-          lockUpdateRefAnchorSelector = true
-          local origFrame = app.activeFrame
-          local origLayer = app.activeLayer
-          local refTileset = get_base_tileset(originalLayer)
-          local cels = tempLayerStates[1].layer.cels
+      -- Saving process
+      app.activeSprite = originalLayer.sprite
+      app.transaction("Edit Reference/Anchor Points",
+       function()
           for _,cel in ipairs(cels)  do
             if cel.position ~= cel.properties(PK).origPos then
               local tileId = cel.frameNumber
@@ -782,85 +801,63 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
               refTileset:tile(tileId).properties(PK).ref = pos
             end
           end
-
-          local auxAnchorsByTile = {}
-          local auxLayerIds = {}
-          for i=2, #tempLayerStates, 1 do
-            local layerId =
-              find_layer_by_name(spr.layers,
-                                 tempLayerStates[i].layer.name).properties(PK).id
-            table.insert(auxLayerIds, layerId)
-          end
-
-          for tileId=1, #refTileset-1, 1 do
-            local auxAnchors = {}
-            app.activeFrame = tileId
-            for i=1, #auxLayerIds, 1 do
-              app.activeLayer = tempLayerStates[i+1].layer
-              local cel = app.activeCel
-              local pos = cel.position + Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
-              table.insert(auxAnchors, {layerId=auxLayerIds[i], position=pos})
-            end
-            table.insert(auxAnchorsByTile, auxAnchors)
-          end
-
           for i=1, #originalLayer.properties(PK).categories, 1 do
             local tileset = db.findTilesetByCategoryID(spr, originalLayer.properties(PK).categories[i])
             for tileId=1, #refTileset-1, 1 do
               tileset:tile(tileId).properties(PK).anchors = auxAnchorsByTile[tileId]
             end
           end
-          app.activeFrame = origFrame
-          app.activeLayer = origLayer
-          tempLayerStates = nil
-          lockUpdateRefAnchorSelector = false
-          backToSprite()
+        end)
+      app.activeFrame = origFrame
+      app.activeLayer = origLayer
+      tempLayerStates = nil
+      lockUpdateRefAnchorSelector = false
+      anchorActionsDlg:close()
+    end
+
+    local function removeAnchorPoint()
+      lockUpdateRefAnchorSelector = true
+      local layerToRemove =
+        find_layer_by_name(tempSprite.layers,
+                            anchorActionsDlg.data.combo)
+      if tempLayerStates[1].layer == layerToRemove then return end
+      for i=2, #tempLayerStates, 1 do
+        if tempLayerStates[i].layer == layerToRemove then
+          tempSprite:deleteLayer(layerToRemove)
+          table.remove(tempLayerStates, i)
+          break
         end
+      end
+      local selectionOptions = generateSelectionOptions()
+      blockComboOnchange = true
+      anchorActionsDlg:modify{ id="combo",
+                                option=selectionOptions[1],
+                                options= selectionOptions }
+      blockComboOnchange = false
+      app.refresh()
+      lockUpdateRefAnchorSelector = false
+    end
 
-        local function removeAnchorPoint()
-          lockUpdateRefAnchorSelector = true
-          local layerToRemove =
-            find_layer_by_name(tempSprite.layers,
-                               anchorActionsDlg.data.combo)
-          if tempLayerStates[1].layer == layerToRemove then return end
-          for i=2, #tempLayerStates, 1 do
-            if tempLayerStates[i].layer == layerToRemove then
-              tempSprite:deleteLayer(layerToRemove)
-              table.remove(tempLayerStates, i)
-              break
-            end
-          end
-          local selectionOptions = generateSelectionOptions()
-          blockComboOnchange = true
-          anchorActionsDlg:modify{ id="combo",
-                                    option=selectionOptions[1],
-                                    options= selectionOptions }
-          blockComboOnchange = false
-          app.refresh()
-          lockUpdateRefAnchorSelector = false
-        end
+    lockUpdateRefAnchorSelector = true
+    local selectionOptions = generateSelectionOptions()
+    anchorActionsDlg:separator{ text="Anchor Actions" }
+    anchorActionsDlg:button{ text="Add", focus=true, onclick=addAnchorPoint }
+    anchorActionsDlg:button{ text="Remove", focus=false, onclick=removeAnchorPoint }
+    anchorActionsDlg:separator{ text="Ref/Anchor selector" }
+    anchorActionsDlg:combobox{ id="combo",
+                                option=selectionOptions[1],
+                                options=selectionOptions,
+                                onchange=onChangeSelection } :newrow()
 
-        lockUpdateRefAnchorSelector = true
-        local selectionOptions = generateSelectionOptions()
-        anchorActionsDlg:separator{ text="Anchor Actions" }
-        anchorActionsDlg:button{ text="Add", focus=true, onclick=addAnchorPoint }
-        anchorActionsDlg:button{ text="Remove", focus=false, onclick=removeAnchorPoint }
-        anchorActionsDlg:separator{ text="Ref/Anchor selector" }
-        anchorActionsDlg:combobox{ id="combo",
-                                   option=selectionOptions[1],
-                                   options=selectionOptions,
-                                   onchange=onChangeSelection } :newrow()
-
-        anchorActionsDlg:separator()
-        anchorActionsDlg:button{ text="OK", onclick=acceptPoints }
-        anchorActionsDlg:button{ text="Cancel", onclick=function() anchorActionsDlg:close() end }
-        anchorActionsDlg:show{ wait=false }
-        anchorActionsDlg.bounds = Rectangle(0, 0, anchorActionsDlg.bounds.width, anchorActionsDlg.bounds.height)
-        popup:close()
-        dlgSkipOnCloseFun = true
-        dlg:close()
-        lockUpdateRefAnchorSelector = false
-      end)
+    anchorActionsDlg:separator()
+    anchorActionsDlg:button{ text="OK", onclick=acceptPoints }
+    anchorActionsDlg:button{ text="Cancel", onclick=function() anchorActionsDlg:close() end }
+    anchorActionsDlg:show{ wait=false }
+    anchorActionsDlg.bounds = Rectangle(0, 0, anchorActionsDlg.bounds.width, anchorActionsDlg.bounds.height)
+    popup:close()
+    dlgSkipOnCloseFun = true
+    dlg:close()
+    lockUpdateRefAnchorSelector = false
   end
 
   local function editAttachment()

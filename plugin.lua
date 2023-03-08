@@ -890,7 +890,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
     local function accept()
       if tempSprite ~= nil then
-        local image = Image(ts:tile(ti).image.width, ts:tile(ti).image.height)
+        local image = Image(ts:tile(ti).image)
         image:drawImage(app.activeCel.image, app.activeCel.position)
         app.activeSprite = spr
         app.transaction("Tile modified",

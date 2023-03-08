@@ -1774,7 +1774,7 @@ local function App_sitechange(ev)
     activeTileImageInfo = {}
   end
 
-  if not imi.isongui then
+  if not imi.isongui and not ev.fromUndo then
     dlg:repaint() -- TODO repaint only when it's needed
   end
 end
@@ -1810,7 +1810,7 @@ local function AttachmentWindow_SwitchWindow()
               canvas="canvas" }
     dlg:show{ wait=false }
 
-    App_sitechange()
+    App_sitechange({ fromUndo=false })
     app.events:on('sitechange', App_sitechange)
     observe_sprite(app.activeSprite)
   end

@@ -1837,31 +1837,43 @@ local function AttachmentSystem_AlignAnchors()
 end
 
 function init(plugin)
+  local groupId
+  if app.apiVersion >= 22 then
+    groupId = "AttachmentSystem_Group"
+    plugin:newMenuGroup{
+      id=groupId,
+      title="Attachment System",
+      group="view_new"
+    }
+  else
+    groupId = "view_new"
+  end
+
   plugin:newCommand{
     id="AttachmentSystem_SwitchWindow",
-    title="Attachment System: Switch Window",
-    group="view_new",
+    title="Open/Close Window",
+    group=groupId,
     onclick=AttachmentWindow_SwitchWindow
   }
 
   plugin:newCommand{
     id="AttachmentSystem_NextAttachmentUsage",
-    title="Attachment System: Find next attachment usage",
-    group="view_new",
+    title="Find Next Attachment Usage",
+    group=groupId,
     onclick=AttachmentSystem_FindNext(MODE_FORWARD)
   }
 
   plugin:newCommand{
     id="AttachmentSystem_PrevAttachmentUsage",
-    title="Attachment System: Find previous attachment usage",
-    group="view_new",
+    title="Find Previous Attachment Usage",
+    group=groupId,
     onclick=AttachmentSystem_FindNext(MODE_BACKWARDS)
   }
 
   plugin:newCommand{
     id="AttachmentSystem_AlignAnchors",
-    title="Attachment System: Align Anchors",
-    group="view_new",
+    title="Align Anchors",
+    group=groupId,
     onclick=AttachmentSystem_AlignAnchors
   }
 

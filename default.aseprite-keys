@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<keyboard version="1">
+    <commands>
+        <key command="AttachmentSystem_FocusAttachmentAbove" shortcut="Ctrl+Up" />
+        <key command="AttachmentSystem_FocusAttachmentBelow" shortcut="Ctrl+Down" />
+        <key command="AttachmentSystem_FocusNextAttachment" shortcut="Ctrl+Right" />
+        <key command="AttachmentSystem_FocusPrevAttachment" shortcut="Ctrl+Left" />
+        <key command="AttachmentSystem_SelectFocusedAttachment" shortcut="Ctrl+Enter" />
+    </commands>
+</keyboard>

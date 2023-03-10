@@ -13,6 +13,9 @@
   "contributes": {
     "scripts": [
       { "path": "./plugin.lua" }
+    ],
+    "keys": [
+      { "id": "AttachmentSystem", "path": "./default.aseprite-keys" }
     ]
   }
 }

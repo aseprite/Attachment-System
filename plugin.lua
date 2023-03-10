@@ -22,9 +22,12 @@ local tilesHistogram = {} -- How many times each tile is used in the active laye
 local activeTileImageInfo = {} -- Used to re-calculate info when the tile image changes
 local focusedItem = nil        -- Folder + item with the keyboard focus
 local focusNewItem = nil       -- Used when a key is pressed to navigate and focus other folder item
+
+-- Plugin preferences
 local showTilesID = false
 local showTilesUsage = false
 local zoom = 1.0
+
 local anchorActionsDlg -- dialog for Add/Remove anchor points
 local anchorListDlg = nil -- dialog por Checks and Entry widgets for anchor points
 local tempLayerStates = {}
@@ -502,6 +505,15 @@ local function count_folder_items_with_tile(folder, tileId)
     end
   end
   return count
+end
+
+local function find_first_item_index_in_folder_by_tile(folder, tileId)
+  for i=1, #folder.items, 1 do
+    if folder.items[i].tile == tileId then
+      return i
+    end
+  end
+  return -1
 end
 
 local function remove_tile_from_folder_by_index(folder, indexInFolder)
@@ -1581,6 +1593,128 @@ local function Sprite_change(ev)
   end
 end
 
+local function focus_active_attachment()
+  local folders = activeLayer.properties(PK).folders
+  if not folders then
+    return false
+  end
+
+  local folder = db.getBaseSetFolder(activeLayer, folders)
+  if not folder or not folder.items or #folder.items < 1 then
+    return false
+  end
+
+  local index = 1
+  local cel = app.activeCel
+  if cel then
+    local ti = cel.image:getPixel(0, 0)
+    index = find_first_item_index_in_folder_by_tile(folder, ti)
+    if index < 1 then
+      index = 1
+    end
+  end
+
+  local item = folder.items[index]
+  focusedItem = { folder=folder.name,
+                  index=index,
+                  tile=item.tile,
+                  position=item.position }
+  return true
+end
+
+-- Moves the keyboard focus from "focusedItem" to the given "delta"
+-- direction in the active viewport, to select the closest attachment
+-- in that direction.
+local function move_focused_item(delta)
+  if not activeLayer then
+    return
+  end
+
+  -- If there is no focused attachment/item: We focus the active
+  -- attachment in the active cel in the base folder. If there is no
+  -- active cel, we just select the first attachment in the base
+  -- folder.
+  if not focusedItem and
+     not focus_active_attachment() then
+    return
+  end
+  assert(focusedItem)
+
+  local folders = activeLayer.properties(PK).folders
+  local folder
+  for i=1,#folders do
+    if folders[i].name == focusedItem.folder then
+      folder = folders[i]
+      break
+    end
+  end
+
+  if folder then
+    local positionBounds = get_folder_position_bounds(folder)
+    local position = Point(focusedItem.position)
+
+    -- Navigate to the next item
+    while positionBounds:contains(position) do
+      position = position + delta
+      local newItem = get_folder_item_index_by_position(folder, position)
+      if newItem then
+        -- Make "position" of new focused item "newItem" visible in
+        -- the focused viewport.
+        local viewport
+        if imi.focusedWidget and
+           imi.focusedWidget.parent and
+           imi.focusedWidget.parent.scrollPos then
+          viewport = imi.focusedWidget.parent
+        end
+        if viewport then
+          local scrollPos = Point(viewport.scrollPos)
+          local itemSize = viewport.itemSize
+          local itemPos = Point(position.x * itemSize.width,
+                                position.y * itemSize.height)
+          if itemPos.x < scrollPos.x then
+            scrollPos.x = itemPos.x
+          elseif itemPos.x > scrollPos.x + viewport.viewportSize.width - itemSize.width then
+            scrollPos.x = itemPos.x - viewport.viewportSize.width + itemSize.width
+          end
+          if itemPos.y < scrollPos.y then
+            scrollPos.y = itemPos.y
+          elseif itemPos.y > scrollPos.y + viewport.viewportSize.height - itemSize.height then
+            scrollPos.y = itemPos.y - viewport.viewportSize.height + itemSize.height
+          end
+          viewport.setScrollPos(scrollPos)
+        end
+
+        focusFolderItem = { folder=folder.name, index=newItem }
+        dlg:repaint()
+        break
+      end
+    end
+  end
+end
+
+local function AttachmentSystem_FocusPrevAttachment()
+  move_focused_item(Point(-1, 0))
+end
+
+local function AttachmentSystem_FocusNextAttachment()
+  move_focused_item(Point(1, 0))
+end
+
+local function AttachmentSystem_FocusAttachmentAbove()
+  move_focused_item(Point(0, -1))
+end
+
+local function AttachmentSystem_FocusAttachmentBelow()
+  move_focused_item(Point(0, 1))
+end
+
+local function AttachmentSystem_SelectFocusedAttachment()
+  -- Select the new tile pressing Enter key
+  if focusedItem then
+    set_active_tile(focusedItem.tile)
+  end
+end
+
 local function canvas_onkeydown(ev)
   if not activeLayer or
      not imi.focusedWidget then
@@ -1597,10 +1731,7 @@ local function canvas_onkeydown(ev)
   elseif ev.code == "ArrowDown" then
     delta = Point(0, 1)
   elseif ev.code == "Enter" or ev.code == "NumpadEnter" then
-    -- Select the new tile pressing Enter key
-    if focusedItem then
-      set_active_tile(focusedItem.tile)
-    end
+    AttachmentSystem_SelectFocusedAttachment()
     ev.stopPropagation()
     dlg:repaint()
   elseif ev.code == "Escape" then
@@ -1612,31 +1743,7 @@ local function canvas_onkeydown(ev)
   if delta then
     -- Don't send key to Aseprite as we've just used it
     ev.stopPropagation()
-
-    local folders = activeLayer.properties(PK).folders
-    local folder
-    for i=1,#folders do
-      if folders[i].name == focusedItem.folder then
-        folder = folders[i]
-        break
-      end
-    end
-
-    if folder then
-      local positionBounds = get_folder_position_bounds(folder)
-      local position = Point(focusedItem.position)
-
-      -- Navigate to the next item
-      while positionBounds:contains(position) do
-        position = position + delta
-        local newItem = get_folder_item_index_by_position(folder, position)
-        if newItem then
-          focusFolderItem = { folder=folder.name, index=newItem }
-          dlg:repaint()
-          break
-        end
-      end
-    end
+    move_focused_item(delta)
   end
 end
 
@@ -1875,6 +1982,41 @@ function init(plugin)
     title="Align Anchors",
     group=groupId,
     onclick=AttachmentSystem_AlignAnchors
+  }
+
+  plugin:newCommand{
+    id="AttachmentSystem_FocusPrevAttachment",
+    title="Focus Previous Attachment",
+    group=groupId,
+    onclick=AttachmentSystem_FocusPrevAttachment
+  }
+
+  plugin:newCommand{
+    id="AttachmentSystem_FocusNextAttachment",
+    title="Focus Next Attachment",
+    group=groupId,
+    onclick=AttachmentSystem_FocusNextAttachment
+  }
+
+  plugin:newCommand{
+    id="AttachmentSystem_FocusAttachmentAbove",
+    title="Focus Attachment Above",
+    group=groupId,
+    onclick=AttachmentSystem_FocusAttachmentAbove
+  }
+
+  plugin:newCommand{
+    id="AttachmentSystem_FocusAttachmentBelow",
+    title="Focus Attachment Below",
+    group=groupId,
+    onclick=AttachmentSystem_FocusAttachmentBelow
+  }
+
+  plugin:newCommand{
+    id="AttachmentSystem_SelectFocusedAttachment",
+    title="Select Focused Attachment",
+    group=groupId,
+    onclick=AttachmentSystem_SelectFocusedAttachment
   }
 
   showTilesID = plugin.preferences.showTilesID

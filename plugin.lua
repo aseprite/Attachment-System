@@ -28,6 +28,7 @@ local focusNewItem = nil       -- Used when a key is pressed to navigate and foc
 -- Plugin preferences
 local showTilesID = false
 local showTilesUsage = false
+local showUnusedTilesSemitransparent = true
 local zoom = 1.0
 
 local anchorActionsDlg -- dialog for Add/Remove anchor points
@@ -1067,11 +1068,17 @@ local function create_tile_view(folders, folder,
   imi.pushID(index)
   local tileImg = ts:getTile(ti)
 
+  local paintAlpha = 1.0
+  if showUnusedTilesSemitransparent and
+     tilesHistogram[ti] == nil then
+    paintAlpha = 0.5
+  end
+
   imi.alignFunc = function(cursor, size, lastBounds)
     return Point(imi.viewport.x + itemPos.x*outSize.width - imi.viewportWidget.scrollPos.x,
                  imi.viewport.y + itemPos.y*outSize.height - imi.viewportWidget.scrollPos.y)
   end
-  imi.image(tileImg, get_shrunken_bounds_of_image(tileImg), outSize, zoom)
+  imi.image(tileImg, get_shrunken_bounds_of_image(tileImg), outSize, zoom, paintAlpha)
   imi.alignFunc = nil
   imi.lastBounds = imi.widget.bounds -- Update lastBounds forced
   local imageWidget = imi.widget
@@ -1334,9 +1341,12 @@ end
 
 local function show_options(rc)
   local popup = Dialog{ parent=imi.dlg }
+  popup:menuItem{ text="Show Unused Attachment as Semitransparent", onclick=function()
+                    showUnusedTilesSemitransparent = not showUnusedTilesSemitransparent
+                  end, selected=showUnusedTilesSemitransparent }
   popup:menuItem{ text="Show Usage", onclick=function() showTilesUsage = not showTilesUsage end,
-                  selected=showTilesUsage }:newrow()
-  popup:menuItem{ text="Show tile ID/Index", onclick=function() showTilesID = not showTilesID end,
+                  selected=showTilesUsage }
+  popup:menuItem{ text="Show Tile ID/Index", onclick=function() showTilesID = not showTilesID end,
                   selected=showTilesID }
   popup:separator()
   popup:menuItem{ text="Reset Zoom", onclick=function() zoom = 1.0 end }

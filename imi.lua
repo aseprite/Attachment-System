@@ -784,7 +784,9 @@ function imi.radio(text, t, thisValue)
   return t.value == thisValue
 end
 
-function imi.image(image, srcRect, dstSize, scale)
+function imi.image(image, srcRect, dstSize, scale, alpha)
+  if not scale then scale = 1.0 end
+  if not alpha then alpha = 1.0 end
   local id = imi.getID()
   advanceCursor(
     dstSize,
@@ -808,10 +810,16 @@ function imi.image(image, srcRect, dstSize, scale)
           end
 
           local w,h = srcRect.width*scale, srcRect.height*scale
+          local paint = nil
+          if app.apiVersion >= 22 then
+            paint = Paint()
+            paint.alpha = alpha
+          end
           ctx:drawImage(image, srcRect,
                         Rectangle(bounds.x+bounds.width/2-w/2,
                                   bounds.y+bounds.height/2-h/2,
-                                  w, h))
+                                  w, h),
+                        paint)
 
           if widget.pressed or
              widget.checked or

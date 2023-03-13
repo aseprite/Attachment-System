@@ -1774,52 +1774,9 @@ local function canvas_ontouchmagnify(ev)
   dlg:repaint()
 end
 
--- TODO This event was removed from Aseprite, because it was called
---      from a background in some cases (e.g. apply an filter/effect
---      to the tiles, called from Aseprite function
---      remove_unused_tiles_from_tileset())
-local function Sprite_remaptileset(ev)
-  -- If the action came from an undo/redo, the properties are restored
-  -- automatically to the old/new value, we don't have to readjust
-  -- them.
-  if not ev.fromUndo and activeLayer then
-    local spr = activeLayer.sprite
-    local layerProperties = db.getLayerProperties(activeLayer)
-    local categories = layerProperties.categories
-    local folders = layerProperties.folders
-
-    -- Remap all categories
-    for _,categoryID in ipairs(categories) do
-      local tileset = db.findTilesetByCategoryID(spr, categoryID)
-      -- TODO
-    end
-
-    -- Remap items in folders
-    for f=1,#folders do
-      local folder = folders[f]
-      local newItems = {}
-      for i=1,#folder.items do
-        table.insert(newItems, { tile=folder.items[i].tile,
-                                 position=folder.items[i].position })
-      end
-      for i=1,#folder.items do
-        newItems[i].tile = ev.remap[folder.items[i].tile]
-      end
-      folder.items = newItems
-      folders[f] = folder
-    end
-
-    -- This generates the undo information for first time in the
-    -- current transaction (within the Remap command)
-    activeLayer.properties(PK).folders = folders
-    dlg:repaint()
-  end
-end
-
 local function unobserve_sprite()
   if observedSprite then
     observedSprite.events:off(Sprite_change)
-    --observedSprite.events:off(Sprite_remaptileset)
     observedSprite = nil
   end
 end
@@ -1829,7 +1786,6 @@ local function observe_sprite(spr)
   observedSprite = spr
   if observedSprite then
     observedSprite.events:on('change', Sprite_change)
-    --observedSprite.events:on('remaptileset', Sprite_remaptileset)
   end
 end
 

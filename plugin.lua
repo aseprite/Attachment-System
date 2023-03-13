@@ -248,9 +248,10 @@ local function align_anchors()
         if layerProperties.id then
           local ts = get_base_tileset(layer)
           local ti = 1          -- TODO use all tiles?
-          if ts:tile(ti).properties(PK).anchors then
-            for j=1,#ts:tile(ti).properties(PK).anchors do
-              local childId = ts:tile(ti).properties(PK).anchors[j].layerId
+          local anchors = ts:tile(ti).properties(PK).anchors
+          if anchors and #anchors >= 1 then
+            for j=1,#anchors do
+              local childId = anchors[j].layerId
               if childId then
                 hierarchy[childId] = layerProperties.id
               end
@@ -592,12 +593,13 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     end
     tempSprite:deleteFrame(#ts)
     -- Load all the anchors in all the tiles
-    if ts:tile(ti).properties(PK).anchors ~= nil then
+    local anchors = ts:tile(ti).properties(PK).anchors
+    if anchors and #anchors >= 1 then
       -- Create the layers
-      for i=1, #ts:tile(ti).properties(PK).anchors, 1 do
+      for i=1, #anchors, 1 do
         table.insert(tempLayerStates, { layer=tempSprite:newLayer() })
         auxLayer = find_layer_by_id(spr.layers,
-                                    ts:tile(ti).properties(PK).anchors[i].layerId)
+                                    anchors[i].layerId)
         if auxLayer ~= nil then
           tempLayerStates[#tempLayerStates].layer.name = auxLayer.name
         else
@@ -605,7 +607,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         end
       end
       for i=1, #ts-1, 1 do
-        for j=1, #ts:tile(ti).properties(PK).anchors, 1 do
+        for j=1, #anchors, 1 do
           local pos = ts:tile(i).properties(PK).anchors[j].position -
                       Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
           tempSprite:newCel(tempLayerStates[j].layer, i, anchorCrossImage, pos)
@@ -943,9 +945,12 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   local function newEmpty()
     local auxAnchors = {}
     local defaultPos = Point(ts.grid.tileSize.width/2, ts.grid.tileSize.height/2)
-    for i=1, #ts:tile(1).properties(PK).anchors, 1 do
-      table.insert(auxAnchors, {layerId=ts:tile(1).properties(PK).anchors[i].layerId,
-                                position=defaultPos})
+    local anchors = ts:tile(1).properties(PK).anchors
+    if anchors and #anchors >= 1 then
+      for i=1, #anchors, 1 do
+        table.insert(auxAnchors, {layerId=anchors[i].layerId,
+                                  position=defaultPos})
+      end
     end
     app.transaction("New Empty Attachment",
       function()
@@ -958,7 +963,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
             else
               assert(t.index == t.index)
             end
-            tile.properties(PK).anchors = auxAnchors
+            t.properties(PK).anchors = auxAnchors
           end)
 
         if tile then

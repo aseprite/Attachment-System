@@ -1036,16 +1036,17 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     app.range.frames = frames
   end
 
-  popup:menuItem{ text="Edit &Anchors", onclick=editAnchors }:newrow()
-  popup:menuItem{ text="&Edit Attachment", onclick=editAttachment }:newrow()
-  popup:menuItem{ text="Align Anchors", onclick=align_anchors }:newrow()
-  popup:separator():newrow()
-  popup:menuItem{ text="&New Empty", onclick=newEmpty }:newrow()
-  popup:menuItem{ text="Dupli&cate", onclick=duplicate }:newrow()
+  popup:menuItem{ text="Edit &Anchors", onclick=editAnchors }
+  popup:menuItem{ text="Align Anchors", onclick=align_anchors }
   popup:separator()
-  popup:menuItem{ text="Select &usage", onclick=selectFrames }:newrow()
-  popup:menuItem{ text="Find &next usage", onclick=function() find_next_attachment_usage(ti, MODE_FORWARD) end }:newrow()
-  popup:menuItem{ text="Find &prev usage", onclick=function() find_next_attachment_usage(ti, MODE_BACKWARDS) end }:newrow()
+  popup:menuItem{ text="&Edit Attachment", onclick=editAttachment }
+  popup:separator()
+  popup:menuItem{ text="&New Empty", onclick=newEmpty }
+  popup:menuItem{ text="Dupli&cate", onclick=duplicate }
+  popup:separator()
+  popup:menuItem{ text="Highlight &Usage", onclick=selectFrames }
+  popup:menuItem{ text="Find &Next Usage", onclick=function() find_next_attachment_usage(ti, MODE_FORWARD) end }
+  popup:menuItem{ text="Find &Prev Usage", onclick=function() find_next_attachment_usage(ti, MODE_BACKWARDS) end }
   local repeatedTiOnBaseFolder = false
   if folder and db.isBaseSetFolder(folder) then
     repeatedTiOnBaseFolder = (count_folder_items_with_tile(folder, ti) > 1)

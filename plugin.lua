@@ -1337,6 +1337,8 @@ local function show_options(rc)
                   selected=showTilesUsage }:newrow()
   popup:menuItem{ text="Show tile ID/Index", onclick=function() showTilesID = not showTilesID end,
                   selected=showTilesID }
+  popup:separator()
+  popup:menuItem{ text="Reset Zoom", onclick=function() zoom = 1.0 end }
   popup:showMenu()
   imi.repaint = true
 end
@@ -1745,6 +1747,15 @@ local function canvas_onkeydown(ev)
   end
 end
 
+local function canvas_onmousedown(ev)
+  if ev.ctrlKey and ev.button == MouseButton.MIDDLE then
+    zoom = 1.0
+    dlg:repaint()
+    return
+  end
+  return imi.onmousedown(ev)
+end
+
 local function canvas_onwheel(ev)
   if ev.ctrlKey then
     if ev.shiftKey then
@@ -1869,7 +1880,7 @@ local function AttachmentWindow_SwitchWindow()
                onpaint=imi.onpaint,
                onkeydown=canvas_onkeydown,
                onmousemove=imi.onmousemove,
-               onmousedown=imi.onmousedown,
+               onmousedown=canvas_onmousedown,
                onmouseup=imi.onmouseup,
                onwheel=canvas_onwheel,
                ontouchmagnify=canvas_ontouchmagnify }

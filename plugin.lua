@@ -17,7 +17,9 @@ local dlg
 local title = "Attachment System"
 local observedSprite
 local activeLayer         -- Active tilemap (nil if the active layer isn't a tilemap)
+local shrunkenBoundsCache = {} -- Cache of shrunken bounds
 local shrunkenBounds = {} -- Minimal bounds between all tiles of the active layer
+local shrunkenSize = Size(1, 1) -- Minimal size between all tiles of the active layer
 local tilesHistogram = {} -- How many times each tile is used in the active layer
 local activeTileImageInfo = {} -- Used to re-calculate info when the tile image changes
 local focusedItem = nil        -- Folder + item with the keyboard focus
@@ -97,19 +99,34 @@ local function set_zoom(z)
   zoom = imi.clamp(z, 0.5, 10.0)
 end
 
+-- As Image:shrinkBounds() can be quite slow, we cache as many calls as possible
+local function get_shrunken_bounds_of_image(image)
+  local cache = shrunkenBoundsCache[image.id]
+  if not cache or cache.version ~= image.version then
+    cache = { version=image.version,
+              bounds=image:shrinkBounds()}
+    shrunkenBoundsCache[image.id] = cache
+  end
+  return cache.bounds
+end
+
 local function calculate_shrunken_bounds(tilemapLayer)
   assert(tilemapLayer.isTilemap)
   local bounds = Rectangle()
+  local size = Size(16, 16)
   local ts = tilemapLayer.tileset
   local ntiles = #ts
   for i = 0,ntiles-1 do
     local tileImg = ts:getTile(i)
-    bounds = bounds:union(tileImg:shrinkBounds())
+    local shrinkBounds = get_shrunken_bounds_of_image(tileImg)
+    bounds = bounds:union(shrinkBounds)
+    size = size:union(shrinkBounds.size)
   end
   if bounds.width <= 1 and bounds.height <= 1 then
-    return Rectangle(0, 0, 40, 40)
+    bounds = Rectangle(0, 0, 8, 8)
   end
-  return bounds
+  shrunkenBounds = bounds
+  shrunkenSize = size
 end
 
 local function calculate_tiles_histogram(tilemapLayer)
@@ -1053,7 +1070,7 @@ local function create_tile_view(folders, folder,
     return Point(imi.viewport.x + itemPos.x*outSize.width - imi.viewportWidget.scrollPos.x,
                  imi.viewport.y + itemPos.y*outSize.height - imi.viewportWidget.scrollPos.y)
   end
-  imi.image(tileImg, inRc, outSize)
+  imi.image(tileImg, get_shrunken_bounds_of_image(tileImg), outSize, zoom)
   imi.alignFunc = nil
   imi.lastBounds = imi.widget.bounds -- Update lastBounds forced
   local imageWidget = imi.widget
@@ -1356,15 +1373,7 @@ local function imi_ongui()
       local folders = layerProperties.folders
 
       local inRc = shrunkenBounds
-      local outSize = Size(128, 128)
-      if inRc.width < outSize.width and
-        inRc.height < outSize.height then
-        outSize = Size(inRc.width, inRc.height)
-      elseif inRc.width > inRc.height then
-        outSize.height = outSize.width * inRc.height / inRc.width
-      else
-        outSize.width = outSize.height * inRc.width / inRc.height
-      end
+      local outSize = Size(shrunkenSize)
       outSize.width = outSize.width * zoom
       outSize.height = outSize.height * zoom
 
@@ -1417,7 +1426,7 @@ local function imi_ongui()
         local tileImg = ts:getTile(ti)
 
         -- Show active tile in active cel
-        imi.image(tileImg, inRc, outSize)
+        imi.image(tileImg, get_shrunken_bounds_of_image(tileImg), outSize, zoom)
 
         -- Context menu for active tile
         imi.widget.onmousedown = function(widget)
@@ -1474,10 +1483,9 @@ local function imi_ongui()
 
         if openFolder then
           -- One viewport for each opened folder
-          local outSize2 = Size(outSize.width*3/4, outSize.height*3/4)
           imi.beginViewport(Size(imi.viewport.width,
-                                 outSize2.height),
-                            outSize2)
+                                 outSize.height),
+                            outSize)
 
           -- If we are not resizing the viewport, we restore the
           -- viewport size stored in the folder
@@ -1515,7 +1523,7 @@ local function imi_ongui()
             imi.pushID(index)
             create_tile_view(folders, folder,
                              index, activeLayer.tileset,
-                             ti, inRc, outSize2, itemPos)
+                             ti, inRc, outSize, itemPos)
 
             if imi.beginDrag() then
               imi.setDragData("tile", { index=index, ti=ti, folder=folder.name })
@@ -1569,7 +1577,7 @@ local function Sprite_change(ev)
          tileImg.version > activeTileImageInfo.version)) then
       activeTileImageInfo = { id=tileImg.id,
                               version=tileImg.version }
-      shrunkenBounds = calculate_shrunken_bounds(activeLayer)
+      calculate_shrunken_bounds(activeLayer)
       if not imi.isongui then
         repaint = true
       end
@@ -1819,7 +1827,7 @@ local function App_sitechange(ev)
   if activeLayer ~= lay then
     activeLayer = lay
     if activeLayer and activeLayer.isTilemap then
-      shrunkenBounds = calculate_shrunken_bounds(activeLayer)
+      calculate_shrunken_bounds(activeLayer)
       tilesHistogram = calculate_tiles_histogram(activeLayer)
     else
       shrunkenBounds = Rectangle()

@@ -112,16 +112,6 @@ local function calculate_shrunken_bounds(tilemapLayer)
   return bounds
 end
 
-local function calculate_shrunken_bounds_from_tileset(tileset)
-  local bounds = Rectangle()
-  local ntiles = #tileset
-  for i = 0,ntiles-1 do
-    local tileImg = tileset:getTile(i)
-    bounds = bounds:union(tileImg:shrinkBounds())
-  end
-  return bounds
-end
-
 local function calculate_tiles_histogram(tilemapLayer)
   local histogram = {}
   for _,cel in ipairs(tilemapLayer.cels) do

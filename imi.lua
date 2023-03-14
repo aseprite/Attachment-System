@@ -810,16 +810,16 @@ function imi.image(image, srcRect, dstSize, scale, alpha)
           end
 
           local w,h = srcRect.width*scale, srcRect.height*scale
-          local paint = nil
+          ctx:save()
           if app.apiVersion >= 22 then
-            paint = Paint()
-            paint.alpha = alpha
+            ctx.opacity = alpha
+            ctx.blendMode = BlendMode.SRC_OVER
           end
           ctx:drawImage(image, srcRect,
                         Rectangle(bounds.x+bounds.width/2-w/2,
                                   bounds.y+bounds.height/2-h/2,
-                                  w, h),
-                        paint)
+                                  w, h))
+          ctx:restore()
 
           if widget.pressed or
              widget.checked or

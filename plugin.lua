@@ -259,9 +259,12 @@ local function align_anchors()
           local anchors = ts:tile(ti).properties(PK).anchors
           if anchors and #anchors >= 1 then
             for j=1,#anchors do
-              local childId = anchors[j].layerId
-              if childId then
-                hierarchy[childId] = layerProperties.id
+              local auxLayer = find_layer_by_id(spr.layers, anchors[j].layerId)
+              if auxLayer then
+                local childId = anchors[j].layerId
+                if childId then
+                  hierarchy[childId] = layerProperties.id
+                end
               end
             end
           end
@@ -303,10 +306,15 @@ local function align_anchors()
           if refPoint then
             local anchorPoint = nil
             local anchors = parentTs:tile(parentTi).properties(PK).anchors
-            for i=1,#anchors do
-              if anchors[i].layerId == childId then
-                anchorPoint = anchors[i].position
-                break
+            if anchors and #anchors >= 1 then
+              for i=1,#anchors do
+                local auxLayer = find_layer_by_id(spr.layers, anchors[i].layerId)
+                if auxLayer then
+                  if anchors[i].layerId == childId then
+                    anchorPoint = anchors[i].position
+                    break
+                  end
+                end
               end
             end
             if anchorPoint then
@@ -605,20 +613,28 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     if anchors and #anchors >= 1 then
       -- Create the layers
       for i=1, #anchors, 1 do
-        table.insert(tempLayerStates, { layer=tempSprite:newLayer() })
-        auxLayer = find_layer_by_id(spr.layers,
-                                    anchors[i].layerId)
-        if auxLayer ~= nil then
+        local auxLayer = find_layer_by_id(spr.layers,
+                                          anchors[i].layerId)
+        if auxLayer then
+          table.insert(tempLayerStates, { layer=tempSprite:newLayer() })
           tempLayerStates[#tempLayerStates].layer.name = auxLayer.name
-        else
-          tempLayerStates[#tempLayerStates].layer.name = "anchor " .. i
         end
       end
       for i=1, #ts-1, 1 do
+        local k = 0
         for j=1, #anchors, 1 do
-          local pos = ts:tile(i).properties(PK).anchors[j].position -
-                      Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
-          tempSprite:newCel(tempLayerStates[j].layer, i, anchorCrossImage, pos)
+          local auxLayer = find_layer_by_id(spr.layers,
+                                            anchors[j].layerId)
+          if auxLayer then
+            local pos = ts:tile(i).properties(PK).anchors[j].position -
+                        Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
+            tempSprite:newCel(tempLayerStates[j - k].layer,
+                              i,
+                              anchorCrossImage,
+                              pos)
+          else
+            k = k + 1
+          end
         end
       end
     end
@@ -679,8 +695,13 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           elseif layer.isTilemap and layer.tileset:tile(1) and
             layer.tileset:tile(1).properties(PK).anchors then
             local anchors = layer.tileset:tile(1).properties(PK).anchors
-            for i=1, #anchors, 1 do
-              table.insert(anchorLayerIds, anchors[i].layerId)
+            if anchors and #anchors >= 1 then
+              for i=1, #anchors, 1 do
+                local auxLayer = find_layer_by_id(spr.layers, anchors[i].layerId)
+                if auxLayer then
+                  table.insert(anchorLayerIds, anchors[i].layerId)
+                end
+              end
             end
           end
         end

@@ -300,20 +300,22 @@ local function align_anchors()
           local childTi = childCel.image:getPixel(0, 0)
 
           local refPoint = childTs:tile(childTi).properties(PK).ref
-          if refPoint then
-            local anchorPoint = nil
-            local anchors = parentTs:tile(parentTi).properties(PK).anchors
-            for i=1,#anchors do
-              if anchors[i].layerId == childId then
-                anchorPoint = anchors[i].position
-                break
-              end
+          if not refPoint then
+            refPoint = Point(childTs.grid.tileSize.width/2,
+                             childTs.grid.tileSize.height/2)
+          end
+          local anchorPoint = nil
+          local anchors = parentTs:tile(parentTi).properties(PK).anchors
+          for i=1,#anchors do
+            if anchors[i].layerId == childId then
+              anchorPoint = anchors[i].position
+              break
             end
-            if anchorPoint then
-              -- Align refPoint with anchorPoint
-              childCel.position =
-                parentCel.position + anchorPoint - refPoint
-            end
+          end
+          if anchorPoint then
+            -- Align refPoint with anchorPoint
+            childCel.position =
+              parentCel.position + anchorPoint - refPoint
           end
         end
       end
@@ -569,12 +571,44 @@ local function remove_tiles_from_folders(folders, ti)
   end
 end
 
+local function composeImage(dstImage, srcImage, position)
+  local uIni = math.max(0, position.x)
+  local vIni = math.max(0, position.y)
+  local uEnd = math.min(dstImage.width - 1, position.x + srcImage.width - 1)
+  local vEnd = math.min(dstImage.height - 1, position.y + srcImage.height - 1)
+
+  local colorMode = dstImage.colorMode
+  local isTransparent
+  if colorMode == ColorMode.RGB then
+    isTransparent = function(image, x, y)
+                    return app.pixelColor.rgbaA(image:getPixel(x, y)) == 0
+                  end
+  elseif colorMode == ColorMode.INDEXED then
+    isTransparent = function(image, x, y)
+                    return image:getPixel(x, y) == image.spec.transparentColor
+                  end
+  elseif colorMode == ColorMode.GRAY then
+    isTransparent = function(image, x, y)
+                    return app.pixelColor.graya(image:getPixel(x, y)) == 0
+                  end
+  end
+
+  for v=vIni, vEnd, 1 do
+    for u=uIni, uEnd, 1 do
+      if not isTransparent(srcImage, u - uIni, v - vIni) then
+        dstImage:drawPixel(u, v, srcImage:getPixel(u - uIni, v - vIni))
+      end
+    end
+  end
+end
+
 local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   local popup = Dialog{ parent=imi.dlg }
   local spr = activeLayer.sprite
 
   -- Variables and Functions associated to editAnchors() and editAttachment()
   local originalLayer = activeLayer
+  local defaultAnchorSample = 1
 
   local function editAnchors()
     create_cross_images(spr.colorMode)
@@ -600,6 +634,25 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
       tempSprite:newEmptyFrame()
     end
     tempSprite:deleteFrame(#ts)
+
+    local function putAnchorImage(layer, frame, anchor)
+      local anchorLayer = find_layer_by_id(spr.layers, anchor.layerId)
+      local anchorRefTs = get_base_tileset(anchorLayer)
+      local ref = anchorRefTs:tile(defaultAnchorSample).properties(PK).ref
+      if not ref then
+        ref = Point(anchorRefTs.grid.tileSize.width/2,
+                    anchorRefTs.grid.tileSize.height/2)
+      end
+      if anchorLayer then
+        local anchorImage = Image(anchorLayer.tileset:tile(defaultAnchorSample).image)
+        composeImage(anchorImage, anchorCrossImage,
+                     ref - Point(anchorCrossImage.width/2, anchorCrossImage.height/2))
+        local pos = anchor.position - ref
+        tempSprite:newCel(layer, frame, anchorImage, pos)
+      end
+
+    end
+
     -- Load all the anchors in all the tiles
     local anchors = ts:tile(ti).properties(PK).anchors
     if anchors and #anchors >= 1 then
@@ -616,9 +669,9 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
       end
       for i=1, #ts-1, 1 do
         for j=1, #anchors, 1 do
-          local pos = ts:tile(i).properties(PK).anchors[j].position -
-                      Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
-          tempSprite:newCel(tempLayerStates[j].layer, i, anchorCrossImage, pos)
+          putAnchorImage(tempLayerStates[j].layer,
+                         i,
+                         ts:tile(i).properties(PK).anchors[j])
         end
       end
     end
@@ -753,10 +806,12 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         tempLayerStates[1].layer.stackIndex = tempLayer.stackIndex
 
         app.activeLayer = tempLayer
-        local pos = Point(tempSprite.width/2, tempSprite.height/2)
-                    - Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
+        local layer = find_layer_by_name(spr.layers, tempLayer.name)
+        assert(layer)
+        local anchor = { layerId=layer.properties(PK).id,
+                         position=Point(ts.grid.tileSize.width/2, ts.grid.tileSize.height/2) }
         for i=1,#tempSprite.frames do
-          tempSprite:newCel(tempLayer, i, anchorCrossImage, pos)
+          putAnchorImage(tempLayer, i, anchor)
         end
 
         local selectionOptions = generateSelectionOptions()
@@ -806,7 +861,14 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         for i=1, #auxLayerIds, 1 do
           app.activeLayer = tempLayerStates[i+1].layer
           local cel = app.activeCel
-          local pos = cel.position + Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
+          local anchorLayer = find_layer_by_id(spr.layers, auxLayerIds[i])
+          local anchorRefTs = get_base_tileset(anchorLayer)
+          local ref = anchorRefTs:tile(defaultAnchorSample).properties(PK).ref
+          if not ref then
+            ref = Point(anchorRefTs.grid.tileSize.width/2,
+                        anchorRefTs.grid.tileSize.height/2)
+          end
+          local pos = cel.position + ref
           table.insert(auxAnchors, {layerId=auxLayerIds[i], position=pos})
         end
         table.insert(auxAnchorsByTile, auxAnchors)

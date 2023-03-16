@@ -114,6 +114,13 @@ end
 
 -- As Image:shrinkBounds() can be quite slow, we cache as many calls as possible
 local function get_shrunken_bounds_of_image(image)
+  -- TODO This shouldn't happen, but it can happen when we convert a
+  --      regular layer to a tilemap layer, something to fix in a near
+  --      future.
+  if not image then
+    return Rectangle()
+  end
+
   local cache = shrunkenBoundsCache[image.id]
   if not cache or cache.version ~= image.version then
     cache = { version=image.version,

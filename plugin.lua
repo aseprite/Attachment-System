@@ -192,11 +192,13 @@ local function find_layer_by_name(layers, name)
 end
 
 local function find_anchor_on_layer(parentLayer, childLayer, parentTile)
-  local anchors = parentLayer.tileset:tile(parentTile).properties(PK).anchors
-  if anchors and #anchors >= 1 then
-    for i=1, #anchors, 1 do
-      if anchors[i].layerId == childLayer.properties(PK).id then
-        return anchors[i]
+  if parentLayer.isTilemap and childLayer.isTilemap then
+    local anchors = parentLayer.tileset:tile(parentTile).properties(PK).anchors
+    if anchors and #anchors >= 1 then
+      for i=1, #anchors, 1 do
+        if anchors[i].layerId == childLayer.properties(PK).id then
+          return anchors[i]
+        end
       end
     end
   end
@@ -664,8 +666,17 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           local auxLayer = find_layer_by_id(spr.layers,
                                             anchors[j].layerId)
           if auxLayer then
-            local pos = ts:tile(i).properties(PK).anchors[j].position -
-                        Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
+            -- Considerations for tilesets with incomplete set of anchors
+            -- due to older Attachments System versions.
+            local pos
+            local auxAnchors = ts:tile(i).properties(PK).anchors
+            if auxAnchors and auxAnchors[j] then
+              pos = auxAnchors[j].position -
+                    Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
+            else
+              pos = Point(tempSprite.width/2, tempSprite.height/2) -
+                    Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
+            end
             tempSprite:newCel(tempLayerStates[j - k].layer,
                               i,
                               anchorCrossImage,

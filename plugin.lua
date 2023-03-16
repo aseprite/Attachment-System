@@ -1615,7 +1615,7 @@ local function imi_ongui()
         -- Context menu for active tile
         imi.widget.onmousedown = function(widget)
           if imi.mouseButton == MouseButton.RIGHT then
-            show_tile_context_menu(ts, ti)
+            show_tile_context_menu(ts, ti, activeLayer.properties(PK).folders)
           end
         end
 

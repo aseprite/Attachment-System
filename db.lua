@@ -165,6 +165,7 @@ function db.isBaseSetFolder(folder)
 end
 
 function db.getBaseSetFolder(layer, folders)
+  assert(folders)
   for _,folder in ipairs(folders) do
     if db.isBaseSetFolder(folder) then
       return folder

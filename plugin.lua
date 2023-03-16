@@ -31,15 +31,27 @@ local showTilesUsage = false
 local showUnusedTilesSemitransparent = true
 local zoom = 1.0
 
-local anchorActionsDlg -- dialog for Add/Remove anchor points
-local anchorListDlg = nil -- dialog por Checks and Entry widgets for anchor points
+-- Dialog for Add/Remove anchor points
+local anchorActionsDlg
+-- Auxiliary array of layers, during editAnchors()
+-- {layer=tempLayerReference, layer=tempLayerAnchor1, layer=tempLayerAnchor2, ... }
+-- TODO: to refactor to a simple array.
 local tempLayerStates = {}
-local anchorCrossImage  -- crosshair to anchor points -full opacity-
+-- Crosshair for anchor points
+local anchorCrossImage
+-- Crosshair for reference point
 local refCrossImage
-local dlgSkipOnCloseFun = false -- flag to avoid 'onclose' actions of 'dlg' Attachment Window (to act as dlg:modify{visible=false}).
+-- Flag to avoid 'onclose' actions of 'dlg' Attachment Window (to act as dlg:modify{visible=false}).
+local dlgSkipOnCloseFun = false
+-- Temporal sprite to edit anchors/ref or attachments images
 local tempSprite = nil
-local childTileSelected = 1 -- temporary child tile to display during anchor editing
-local lockUpdateRefAnchorSelector = false -- flag to lock the update of Ref/Anchor selector comboBox
+-- Flag to lock the update of Ref/Anchor selector comboBox
+local lockUpdateRefAnchorSelector = false
+-- Helps to save only the changes, it improves performance and the undo process.
+-- Array of bool elements to detect changes on the tempSprite cels, used on Sprite_change()
+local changeDetectionOnCels = ni
+-- Layer used to editing attachment on editAttachment(), used on Sprite_change()l
+local editAttachmentLayer = nil
 
 local function create_cross_images(colorMode)
   local black = Color(0,0,0)
@@ -179,6 +191,30 @@ local function find_layer_by_name(layers, name)
   return nil
 end
 
+local function find_anchor_on_layer(parentLayer, childLayer, parentTile)
+  local anchors = parentLayer.tileset:tile(parentTile).properties(PK).anchors
+  if anchors and #anchors >= 1 then
+    for i=1, #anchors, 1 do
+      if anchors[i].layerId == childLayer.properties(PK).id then
+        return anchors[i]
+      end
+    end
+  end
+  return nil
+end
+
+local function find_parent_layer(layers, childLayer)
+  for _,layer in ipairs(layers) do
+    if layer.isGroup then
+      local result = find_parent_layer(layer.layers, childLayer)
+      if result then return result end
+    elseif find_anchor_on_layer(layer, childLayer, 1) then
+      return layer
+    end
+  end
+  return nil
+end
+
 local function find_tileset_by_name(spr, name)
   for i=1,#spr.tilesets do
     local tileset = spr.tilesets[i]
@@ -256,9 +292,10 @@ local function align_anchors()
         if layerProperties.id then
           local ts = get_base_tileset(layer)
           local ti = 1          -- TODO use all tiles?
-          if ts:tile(ti).properties(PK).anchors then
-            for j=1,#ts:tile(ti).properties(PK).anchors do
-              local childId = ts:tile(ti).properties(PK).anchors[j].layerId
+          local anchors = ts:tile(ti).properties(PK).anchors
+          if anchors and #anchors >= 1 then
+            for j=1,#anchors do
+              local childId = anchors[j].layerId
               if childId then
                 hierarchy[childId] = layerProperties.id
               end
@@ -574,6 +611,8 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
 
   -- Variables and Functions associated to editAnchors() and editAttachment()
   local originalLayer = activeLayer
+  local refTileset = get_base_tileset(originalLayer)
+  local originalFrame = app.activeFrame.frameNumber
 
   local function editAnchors()
     create_cross_images(spr.colorMode)
@@ -786,7 +825,6 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
       lockUpdateRefAnchorSelector = true
       local origFrame = app.activeFrame
       local origLayer = app.activeLayer
-      local refTileset = get_base_tileset(originalLayer)
       local cels = tempLayerStates[1].layer.cels
 
       -- Process all anchors in one array 'auxAnchorsByTile'
@@ -879,22 +917,30 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     lockUpdateRefAnchorSelector = false
   end
 
+  local function is_unused_tile(tileIndex)
+    return tilesHistogram[tileIndex] == nil
+  end
+
   local function editAttachment()
-    originalLayer = activeLayer
     dlgSkipOnCloseFun = true
+    local defaultAnchorSample = 1
 
     local function cancel()
       if tempSprite ~= nil then
         tempSprite:close()
         tempSprite = nil
       end
+      changeDetectionOnCels = nil
+      editAttachmentLayer = nil
       dlgSkipOnCloseFun = false
+      app.activeFrame = originalFrame
     end
 
     local editAttachmentDlg = Dialog{ title="Edit Attachment", onclose=cancel }
     editAttachmentDlg:label{ text="When finish press OK" }
-    local tileSize = ts.grid.tileSize
-    tempSprite = Sprite(tileSize.width, tileSize.height, spr.colorMode)
+    local tileSize = refTileset.grid.tileSize
+    tempSprite = Sprite(spr.width, spr.height, spr.colorMode)
+    local attachmentOriginalPositions = {}
     app.transaction("New Sprite for attachment edition",
       function()
         local palette = spr.palettes[1]
@@ -902,20 +948,113 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         for i=0, #palette-1, 1 do
           tempSprite.palettes[1]:setColor(i, palette:getColor(i))
         end
-        tempSprite.cels[1].image = ts:tile(ti).image
+        for i=1, #ts-2, 1 do
+          tempSprite:newEmptyFrame()
+        end
+
+        local tilePosOnTempSprite = Point((tempSprite.width - tileSize.width)/2,
+                                          (tempSprite.height - tileSize.height)/2)
+
+        -- Add faded parent tiles layer for reference
+        local parentLayer = find_parent_layer(spr.layers, originalLayer)
+        if parentLayer then
+          local defaultParentAnchor = find_anchor_on_layer(parentLayer, originalLayer, defaultAnchorSample)
+          assert(defaultParentAnchor)
+          local parentLayerOnTempSprite = tempSprite.layers[1]
+          parentLayerOnTempSprite.name = parentLayer.name
+          for i=1, #ts-1, 1 do
+            app.activeSprite = spr
+            app.activeFrame = originalFrame
+            app.activeLayer = originalLayer
+            local parentAnchorPos
+            local parentImageIndex
+            if not is_unused_tile(i) then
+              find_next_attachment_usage(i, 0)
+              if parentLayer:cel(app.activeFrame.frameNumber) then
+                parentImageIndex = parentLayer:cel(app.activeFrame.frameNumber).image:getPixel(0, 0)
+                local parentAnchor = find_anchor_on_layer(parentLayer, originalLayer, parentImageIndex)
+                if parentAnchor then
+                  parentAnchorPos = parentAnchor.position
+                end
+              else
+                parentImageIndex = defaultAnchorSample
+                parentAnchorPos = defaultParentAnchor.position
+              end
+            else
+              parentImageIndex = defaultAnchorSample
+              parentAnchorPos = defaultParentAnchor.position
+            end
+            local ref = refTileset:tile(i).properties(PK).ref
+            if not ref then
+              ref = Point(tileSize.width/2, tileSize.height/2)
+            end
+            local parentPos = tilePosOnTempSprite + ref - parentAnchorPos
+            tempSprite:newCel(parentLayerOnTempSprite,
+                              i,
+                              Image(parentLayer.tileset:tile(parentImageIndex).image),
+                              parentPos)
+          end
+          app.activeSprite = tempSprite
+          app.command.LayerOpacity {
+            opacity = 128
+          }
+          app.activeLayer.isEditable = false
+        end
+
+        -- Add Attachment editing layer
+        if parentLayer then
+          editAttachmentLayer = tempSprite:newLayer()
+        else
+          -- Recycle first layer if no parent found
+          editAttachmentLayer = tempSprite.layers[1]
+        end
+        editAttachmentLayer.name = originalLayer.name
+
+        -- Filling with attachmnts images the Attachment editing layer
+        for i=1, #tempSprite.frames, 1 do
+          tempSprite:newCel(editAttachmentLayer,
+                            i,
+                            ts:tile(i).image,
+                            tilePosOnTempSprite)
+          table.insert(attachmentOriginalPositions, tilePosOnTempSprite)
+        end
+
+        app.activeLayer = editAttachmentLayer
+        app.activeFrame = ti
+
+        changeDetectionOnCels = {}
+        for i=1, #tempSprite.frames, 1 do
+          table.insert(changeDetectionOnCels, false)
+        end
       end)
 
     local function accept()
+      local changes = changeDetectionOnCels
+      changeDetectionOnCels = nil
+      app.activeSprite = spr
       if tempSprite ~= nil then
-        local image = Image(ts:tile(ti).image)
-        image:drawImage(app.activeCel.image, app.activeCel.position)
-        app.activeSprite = spr
-        app.transaction("Tile modified",
-          function()
-            ts:tile(ti).image = image
-          end)
+        for i=1, #tempSprite.frames, 1 do
+          if changes[i] and editAttachmentLayer:cel(i) then
+            local celImage = editAttachmentLayer:cel(i).image
+            if not celImage:isEmpty() then
+              local image = Image(ts:tile(i).image.width, ts:tile(i).image.height)
+              local pos = editAttachmentLayer:cel(i).position - attachmentOriginalPositions[i]
+              image:drawImage(celImage, pos)
+              app.transaction("Attachments modified",
+                function()
+                  ts:tile(i).image = image
+                  if not refTileset:tile(i).properties(PK).ref then
+                    refTileset:tile(i).properties(PK).ref = Point(tileSize.width/2, tileSize.height/2)
+                  end
+                end)
+            end
+          end
+        end
       end
+      changeDetectionOnCels = nil
+      editAttachmentLayer = nil
       editAttachmentDlg:close()
+      app.activeFrame = originalFrame
     end
 
     editAttachmentDlg:button{ text="Cancel", onclick=function() editAttachmentDlg:close() end }
@@ -995,10 +1134,6 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         end
       end)
     popup:close()
-  end
-
-  local function is_unused_tile(tileIndex)
-    return tilesHistogram[tileIndex] == nil
   end
 
   local function delete(repeatedTiOnBaseFolder)
@@ -1597,6 +1732,11 @@ local function Sprite_change(ev)
     else
       activeTileImageInfo = {}
     end
+  end
+
+  if changeDetectionOnCels and
+     app.activeLayer == editAttachmentLayer then
+    changeDetectionOnCels[app.activeFrame.frameNumber] = true
   end
 
   if repaint then

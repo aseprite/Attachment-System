@@ -826,7 +826,7 @@ end
 
 function imi.image(image, srcRect, dstSize, scale, alpha)
   if not scale then scale = 1.0 end
-  if not alpha then alpha = 1.0 end
+  if not alpha then alpha = 255 end
   local id = imi.getID()
   advanceCursor(
     dstSize,

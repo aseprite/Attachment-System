@@ -1246,10 +1246,10 @@ local function create_tile_view(folders, folder,
   imi.pushID(index)
   local tileImg = ts:getTile(ti)
 
-  local paintAlpha = 1.0
+  local paintAlpha = 255
   if showUnusedTilesSemitransparent and
      tilesHistogram[ti] == nil then
-    paintAlpha = 0.5
+    paintAlpha = 128
   end
 
   imi.alignFunc = function(cursor, size, lastBounds)

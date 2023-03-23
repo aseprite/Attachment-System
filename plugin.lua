@@ -2193,6 +2193,10 @@ function init(plugin)
 end
 
 function exit(plugin)
+  if dlg then
+    dlg:close()
+  end
+
   plugin.preferences.showTilesID = showTilesID
   plugin.preferences.showTilesUsage = showTilesUsage
   plugin.preferences.zoom = zoom

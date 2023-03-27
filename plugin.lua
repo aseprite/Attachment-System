@@ -1283,6 +1283,10 @@ local function create_tile_view(folders, folder,
     end
   end
 
+  imi.widget.ondblclick = function(ev)
+    set_active_tile(ti)
+  end
+
   if imi.widget.checked then
     imi.widget.checked = false
   end
@@ -2076,6 +2080,7 @@ local function AttachmentWindow_SwitchWindow()
                onmousemove=imi.onmousemove,
                onmousedown=canvas_onmousedown,
                onmouseup=imi.onmouseup,
+               ondblclick=imi.ondblclick,
                onwheel=canvas_onwheel,
                ontouchmagnify=canvas_ontouchmagnify }
     imi.init{ dialog=dlg,

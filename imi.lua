@@ -360,6 +360,70 @@ local function insideViewport(bounds)
     imi.viewportWidget.bounds:intersects(bounds)
 end
 
+-- Adjusts the mouseWidgets stack to fix problems dragging imi.image
+-- (attachments/tiles) instead of viewport scroll bars when a scroll
+-- bar overlaps a imi.image. In performance terms, this solution is
+-- better than just fix the imi.mouseWidgetCandidates list on
+-- updateWidget or onPaint because this action is done one time per
+-- mouse click instead every updateWidget.
+--
+-- If we find 2 adjacent widgets with non empty viewportSize, it means
+-- a viewport with scroll bar was clicked.  If we find 2 or 4 adjacent
+-- widgets with non empty viewportSize we need to modify mouseWidgets
+-- to take account widgets priorities.
+local function adjustMouseWidgetsDependingOnViewports()
+  local mouseWidgets = imi.mouseWidgets
+  local vp1Index = nil
+  local vp2Index = nil
+  local index = #mouseWidgets
+  while index >= 2 do
+    if mouseWidgets[index].viewportSize and
+       mouseWidgets[index-1].viewportSize then
+      if not vp1Index then
+        vp1Index = index
+        index = index - 1
+      elseif index >= 2 and not vp2Index then
+        vp2Index = index
+        index = index - 1
+      end
+    end
+    index = index - 1
+  end
+  -- If two viewports are clicked, we need to prioritize vp2 over other widgets
+  -- only if its scrollbar is clicked (MainViewport)
+  if vp1Index and vp2Index then
+    local mainViewportBounds = Rectangle(mouseWidgets[vp2Index].bounds.origin,
+                                         mouseWidgets[vp2Index].viewportSize)
+    if not mainViewportBounds:contains(imi.mousePos) then
+      for i=#mouseWidgets, vp2Index + 1, -1 do
+        table.remove(mouseWidgets, #mouseWidgets)
+      end
+    -- If the click is done outside of the scrollbar of the MainViewport, we need to
+    -- prioritize tileView viewport over other widgets only if its scrollbar is clicked.
+    elseif vp1Index then
+      local tileViewViewportBounds= Rectangle(mouseWidgets[vp1Index].bounds.origin,
+                                              mouseWidgets[vp1Index].viewportSize)
+      if not tileViewViewportBounds:contains(imi.mousePos) then
+        for i=#mouseWidgets, vp1Index + 1, -1 do
+          table.remove(mouseWidgets, #mouseWidgets)
+        end
+      end
+    end
+  -- If one viewport is clicked (MainViewport), we need to prioritize it
+  -- over other widgets only if its scrollbar is clicked.
+  elseif vp1Index then
+    local mainViewportBounds = Rectangle(mouseWidgets[vp1Index].bounds.origin,
+                                         mouseWidgets[vp1Index].viewportSize)
+    if not mainViewportBounds:contains(imi.mousePos) then
+      for i=#mouseWidgets, vp1Index + 1, -1 do
+        table.remove(mouseWidgets, #mouseWidgets)
+      end
+    end
+  end
+
+  return mouseWidgets
+end
+
 ----------------------------------------------------------------------
 -- Public API
 ----------------------------------------------------------------------
@@ -497,65 +561,7 @@ function imi.onmousedown(ev)
   imi.mouseButton = ev.button
   imi.repaint = false
 
-  local mouseWidgets = imi.mouseWidgets
-  -- Adjust the mouseWidgets stack to fix wrong tile drag instead of
-  -- scroll bar drag when tile and scroll bar overlaps.
-  -- In performance terms, this solution is better than just fix the
-  -- imi.mouseWidgetCandidates list on updateWidget or onPaint because this
-  -- action is done one time per mouse click instead every updateWidget.
-  --
-  -- If we find 2 adjacent widgets with non empty viewportSize, it means
-  -- a viewport with scroll bar was clicked.
-  -- If we find 2 or 4 adjacent widgets with non empty viewportSize
-  -- we need to modify mouseWidgets to take account widgets priorities.
-  local vp1Index = nil
-  local vp2Index = nil
-  local index = #mouseWidgets
-  while index >= 2 do
-    if mouseWidgets[index].viewportSize and
-       mouseWidgets[index-1].viewportSize then
-      if not vp1Index then
-        vp1Index = index
-        index = index - 1
-      elseif index >= 2 and not vp2Index then
-        vp2Index = index
-        index = index - 1
-      end
-    end
-    index = index - 1
-  end
-  -- If two viewports are clicked, we need to prioritize vp2 over other widgets
-  -- only if its scrollbar is clicked (MainViewport)
-  if vp1Index and vp2Index then
-    local mainViewportBounds = Rectangle(mouseWidgets[vp2Index].bounds.origin,
-                                         mouseWidgets[vp2Index].viewportSize)
-    if not mainViewportBounds:contains(imi.mousePos) then
-      for i=#mouseWidgets, vp2Index + 1, -1 do
-        table.remove(mouseWidgets, #mouseWidgets)
-      end
-    -- If the click is done outside of the scrollbar of the MainViewport, we need to
-    -- prioritize tileView viewport over other widgets only if its scrollbar is clicked.
-    elseif vp1Index then
-      local tileViewViewportBounds= Rectangle(mouseWidgets[vp1Index].bounds.origin,
-                                              mouseWidgets[vp1Index].viewportSize)
-      if not tileViewViewportBounds:contains(imi.mousePos) then
-        for i=#mouseWidgets, vp1Index + 1, -1 do
-          table.remove(mouseWidgets, #mouseWidgets)
-        end
-      end
-    end
-  -- If one viewport is clicked (MainViewport), we need to prioritize it
-  -- over other widgets only if its scrollbar is clicked.
-  elseif vp1Index then
-    local mainViewportBounds = Rectangle(mouseWidgets[vp1Index].bounds.origin,
-                                         mouseWidgets[vp1Index].viewportSize)
-    if not mainViewportBounds:contains(imi.mousePos) then
-      for i=#mouseWidgets, vp1Index + 1, -1 do
-        table.remove(mouseWidgets, #mouseWidgets)
-      end
-    end
-  end
-
+  local mouseWidgets = adjustMouseWidgetsDependingOnViewports()
   for i=#mouseWidgets,1,-1 do
     local widget = mouseWidgets[i]
     assert(widget ~= nil)
@@ -611,6 +617,20 @@ function imi.onmouseup(ev)
   end
 
   imi.dlg:modify{ id=imi.canvasId, mouseCursor=imi.mouseCursor }
+end
+
+function imi.ondblclick(ev)
+  imi.mousePos = Point(ev.x, ev.y)
+  imi.mouseButton = ev.button
+  imi.repaint = false
+
+  local mouseWidgets = adjustMouseWidgetsDependingOnViewports()
+  for i=#imi.mouseWidgets,1,-1 do
+    local widget = imi.mouseWidgets[i]
+    if widget.ondblclick then
+      widget.ondblclick(widget)
+    end
+  end
 end
 
 function imi.pushID(id)

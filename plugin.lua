@@ -630,6 +630,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   local originalLayer = activeLayer
   local refTileset = get_base_tileset(originalLayer)
   local originalFrame = app.activeFrame.frameNumber
+  local defaultAnchorSample = 1
 
   local function editAnchors()
     create_cross_images(spr.colorMode)
@@ -655,42 +656,44 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
       tempSprite:newEmptyFrame()
     end
     tempSprite:deleteFrame(#ts)
+
+    local function putAnchorImage(layer, frame, anchor)
+      local anchorLayer = find_layer_by_id(spr.layers, anchor.layerId)
+      local anchorRefTs = get_base_tileset(anchorLayer)
+      local ref = anchorRefTs:tile(defaultAnchorSample).properties(PK).ref
+      if not ref then
+        ref = Point(anchorRefTs.grid.tileSize.width/2,
+                    anchorRefTs.grid.tileSize.height/2)
+      end
+      if anchorLayer then
+        local anchorImage = Image(anchorLayer.tileset:tile(defaultAnchorSample).image)
+        anchorImage:drawImage(anchorCrossImage,
+                              ref - Point(anchorCrossImage.width/2, anchorCrossImage.height/2))
+        local pos = anchor.position - ref
+        tempSprite:newCel(layer, frame, anchorImage, pos)
+      end
+
+    end
+
     -- Load all the anchors in all the tiles
     local anchors = ts:tile(ti).properties(PK).anchors
     if anchors and #anchors >= 1 then
       -- Create the layers
       for i=1, #anchors, 1 do
+        table.insert(tempLayerStates, { layer=tempSprite:newLayer() })
         local auxLayer = find_layer_by_id(spr.layers,
                                           anchors[i].layerId)
-        if auxLayer then
-          table.insert(tempLayerStates, { layer=tempSprite:newLayer() })
+        if auxLayer ~= nil then
           tempLayerStates[#tempLayerStates].layer.name = auxLayer.name
+        else
+          tempLayerStates[#tempLayerStates].layer.name = "anchor " .. i
         end
       end
       for i=1, #ts-1, 1 do
-        local k = 0
         for j=1, #anchors, 1 do
-          local auxLayer = find_layer_by_id(spr.layers,
-                                            anchors[j].layerId)
-          if auxLayer then
-            -- Considerations for tilesets with incomplete set of anchors
-            -- due to older Attachments System versions.
-            local pos
-            local auxAnchors = ts:tile(i).properties(PK).anchors
-            if auxAnchors and auxAnchors[j] then
-              pos = auxAnchors[j].position -
-                    Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
-            else
-              pos = Point(tempSprite.width/2, tempSprite.height/2) -
-                    Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
-            end
-            tempSprite:newCel(tempLayerStates[j - k].layer,
-                              i,
-                              anchorCrossImage,
-                              pos)
-          else
-            k = k + 1
-          end
+          putAnchorImage(tempLayerStates[j].layer,
+                         i,
+                         ts:tile(i).properties(PK).anchors[j])
         end
       end
     end
@@ -830,10 +833,12 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         tempLayerStates[1].layer.stackIndex = tempLayer.stackIndex
 
         app.activeLayer = tempLayer
-        local pos = Point(tempSprite.width/2, tempSprite.height/2)
-                    - Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
+        local layer = find_layer_by_name(spr.layers, tempLayer.name)
+        assert(layer)
+        local anchor = { layerId=layer.properties(PK).id,
+                         position=Point(ts.grid.tileSize.width/2, ts.grid.tileSize.height/2) }
         for i=1,#tempSprite.frames do
-          tempSprite:newCel(tempLayer, i, anchorCrossImage, pos)
+          putAnchorImage(tempLayer, i, anchor)
         end
 
         local selectionOptions = generateSelectionOptions()
@@ -882,7 +887,14 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
         for i=1, #auxLayerIds, 1 do
           app.activeLayer = tempLayerStates[i+1].layer
           local cel = app.activeCel
-          local pos = cel.position + Point(anchorCrossImage.width/2, anchorCrossImage.height/2)
+          local anchorLayer = find_layer_by_id(spr.layers, auxLayerIds[i])
+          local anchorRefTs = get_base_tileset(anchorLayer)
+          local ref = anchorRefTs:tile(defaultAnchorSample).properties(PK).ref
+          if not ref then
+            ref = Point(anchorRefTs.grid.tileSize.width/2,
+                        anchorRefTs.grid.tileSize.height/2)
+          end
+          local pos = cel.position + ref
           table.insert(auxAnchors, {layerId=auxLayerIds[i], position=pos})
         end
         table.insert(auxAnchorsByTile, auxAnchors)

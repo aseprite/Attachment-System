@@ -1089,7 +1089,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
           if changes[i] and editAttachmentLayer:cel(i) then
             local celImage = editAttachmentLayer:cel(i).image
             if not celImage:isEmpty() then
-              local image = Image(ts:tile(i).image.width, ts:tile(i).image.height)
+              local image = Image(ts:tile(i).image.spec)
               local pos = editAttachmentLayer:cel(i).position - attachmentOriginalPositions[i]
               image:drawImage(celImage, pos)
               app.transaction("Attachments modified",

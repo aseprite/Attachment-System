@@ -2,7 +2,7 @@
   "name": "Attachment-System",
   "displayName": "Aseprite Attachment System",
   "description": "A system to use tiles as subsprites",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "author": { "name": "Igara Studio S.A.",
               "email": "support@aseprite.org",
               "url": "https://github.com/aseprite/Attachment-System" },

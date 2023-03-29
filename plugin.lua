@@ -1109,8 +1109,8 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
       app.activeFrame = originalFrame
     end
 
+    editAttachmentDlg:button{ text="OK", onclick=accept }
     editAttachmentDlg:button{ text="Cancel", onclick=function() editAttachmentDlg:close() end }
-    editAttachmentDlg:button{ text="OK", onclick=accept }:newrow()
     editAttachmentDlg:show{ wait=false }
     editAttachmentDlg.bounds = Rectangle(60*imi.uiScale,
                                          60*imi.uiScale,

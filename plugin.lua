@@ -1102,6 +1102,9 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
             end
           end
         end
+        if originalLayer then
+          calculate_shrunken_bounds(originalLayer)
+        end
       end
       changeDetectionOnCels = nil
       editAttachmentLayer = nil

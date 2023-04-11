@@ -1553,11 +1553,38 @@ end
 
 local function imi_ongui()
   local spr = app.activeSprite
+
+  function new_layer_button()
+    if imi.button("New Layer") then
+      app.transaction(
+        "New Layer",
+        function()
+          -- Create a new tilemap with the grid bounds as the canvas
+          -- bounds and a tileset with one empty tile to start
+          -- painting.
+          local oldGrid = spr.gridBounds
+          spr.gridBounds = spr.bounds
+          app.command.NewLayer{ tilemap=true }
+          activeLayer = app.activeLayer
+          spr:newTile(activeLayer.tileset)
+          set_active_tile(1)
+          spr.gridBounds = oldGrid
+        end)
+    end
+  end
+
   if not spr then
     dlg:modify{ title=title }
 
-    imi.ctx.color = app.theme.color.text
-    imi.label("No sprite")
+    if imi.button("New Sprite") then
+      app.command.NewFile()
+      spr = app.activeSprite
+      if spr then
+        app.transaction("Setup Attachment System",
+                        function() db.setupSprite(spr) end)
+        imi.repaint = true
+      end
+    end
   elseif spr == tempSprite then
     --do nothing
   elseif not spr.properties(PK).version or
@@ -1617,7 +1644,7 @@ local function imi_ongui()
           end)
       end
 
-      imi.space(2*imi.uiScale)
+      new_layer_button()
       if imi.button("Options") then
         imi.afterGui(show_options)
       end
@@ -1770,6 +1797,8 @@ local function imi_ongui()
 
       imi.endViewport()
       imi.popViewport()
+    else
+      new_layer_button()
     end
   end
 end

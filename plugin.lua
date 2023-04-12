@@ -1553,6 +1553,7 @@ end
 
 local function imi_ongui()
   local spr = app.activeSprite
+  local folders
 
   function new_layer_button()
     if imi.button("New Layer") then
@@ -1566,6 +1567,7 @@ local function imi_ongui()
           spr.gridBounds = spr.bounds
           app.command.NewLayer{ tilemap=true }
           activeLayer = app.activeLayer
+          folders = db.getLayerProperties(activeLayer).folders
           spr:newTile(activeLayer.tileset)
           db.setupSprite(spr)
           set_active_tile(1)
@@ -1608,7 +1610,7 @@ local function imi_ongui()
     if activeLayer then
       local layerProperties = db.getLayerProperties(activeLayer)
       local categories = layerProperties.categories
-      local folders = layerProperties.folders
+      folders = layerProperties.folders
 
       local inRc = shrunkenBounds
       local outSize = Size(shrunkenSize)
@@ -1665,6 +1667,17 @@ local function imi_ongui()
 
         -- Show active tile in active cel
         imi.image(tileImg, get_shrunken_bounds_of_image(tileImg), outSize, zoom)
+
+        if ti > 0 then
+          imi.alignFunc = function(cursor, size, lastBounds)
+              return Point(lastBounds.x + 4,
+                           lastBounds.y + outSize.height - size.height - 4)
+            end
+          imi.sameLine = true
+          imi.label(string.format("[%d]", ti))
+          imi.widget.color = Color(255, 255, 0)
+          imi.alignFunc = nil
+        end
 
         -- Context menu for active tile
         imi.widget.onmousedown = function(widget)

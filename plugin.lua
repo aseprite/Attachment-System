@@ -1666,6 +1666,17 @@ local function imi_ongui()
         -- Show active tile in active cel
         imi.image(tileImg, get_shrunken_bounds_of_image(tileImg), outSize, zoom)
 
+        if ti > 0 then
+          imi.alignFunc = function(cursor, size, lastBounds)
+              return Point(lastBounds.x + 4,
+                           lastBounds.y + outSize.height - size.height - 4)
+            end
+          imi.sameLine = true
+          imi.label(string.format("[%d]", ti))
+          imi.widget.color = Color(255, 255, 0)
+          imi.alignFunc = nil
+        end
+
         -- Context menu for active tile
         imi.widget.onmousedown = function(widget)
           if imi.mouseButton == MouseButton.RIGHT then

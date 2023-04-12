@@ -1558,6 +1558,7 @@ end
 
 local function imi_ongui()
   local spr = app.activeSprite
+  local folders
 
   function new_layer_button()
     if imi.button("New Layer") then
@@ -1571,6 +1572,7 @@ local function imi_ongui()
           spr.gridBounds = spr.bounds
           app.command.NewLayer{ tilemap=true }
           activeLayer = app.activeLayer
+          folders = db.getLayerProperties(activeLayer).folders
           spr:newTile(activeLayer.tileset)
           db.setupSprite(spr)
           set_active_tile(1)
@@ -1613,7 +1615,7 @@ local function imi_ongui()
     if activeLayer then
       local layerProperties = db.getLayerProperties(activeLayer)
       local categories = layerProperties.categories
-      local folders = layerProperties.folders
+      folders = layerProperties.folders
 
       local inRc = shrunkenBounds
       local outSize = Size(shrunkenSize)

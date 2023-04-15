@@ -1541,17 +1541,49 @@ local function show_folder_context_menu(folders, folder)
   popup:showMenu()
 end
 
+local function AttachmentSystem_ShowTilesID()
+  if not dlg then return end
+  showTilesID = not showTilesID
+  imi.repaint = true
+end
+
+local function AttachmentSystem_ShowUsage()
+  if not dlg then return end
+  showTilesUsage = not showTilesUsage
+  imi.repaint = true
+end
+
+local function AttachmentSystem_ShowUsage()
+  if not dlg then return end
+  showTilesUsage = not showTilesUsage
+  imi.repaint = true
+end
+
+local function AttachmentSystem_ShowUnusedTilesSemitransparent()
+  if not dlg then return end
+  showUnusedTilesSemitransparent = not showUnusedTilesSemitransparent
+  imi.repaint = true
+end
+
+local function AttachmentSystem_ResetZoom()
+  if not dlg then return end
+  zoom = 1.0
+  imi.repaint = true
+end
+
 local function show_options(rc)
   local popup = Dialog{ parent=imi.dlg }
-  popup:menuItem{ text="Show Unused Attachment as Semitransparent", onclick=function()
-                    showUnusedTilesSemitransparent = not showUnusedTilesSemitransparent
-                  end, selected=showUnusedTilesSemitransparent }
-  popup:menuItem{ text="Show Usage", onclick=function() showTilesUsage = not showTilesUsage end,
+  popup:menuItem{ text="Show Unused Attachment as Semitransparent",
+                  onclick=AttachmentSystem_ShowUnusedTilesSemitransparent,
+                  selected=showUnusedTilesSemitransparent }
+  popup:menuItem{ text="Show Usage",
+                  onclick=AttachmentSystem_ShowUsage,
                   selected=showTilesUsage }
-  popup:menuItem{ text="Show Tile ID/Index", onclick=function() showTilesID = not showTilesID end,
+  popup:menuItem{ text="Show Tile ID/Index",
+                  onclick=AttachmentSystem_ShowTilesID,
                   selected=showTilesID }
   popup:separator()
-  popup:menuItem{ text="Reset Zoom", onclick=function() zoom = 1.0 end }
+  popup:menuItem{ text="Reset Zoom", onclick=AttachmentSystem_ResetZoom }
   popup:showMenu()
   imi.repaint = true
 end
@@ -2245,6 +2277,44 @@ function init(plugin)
     title="Select Focused Attachment",
     group=groupId,
     onclick=AttachmentSystem_SelectFocusedAttachment
+  }
+
+  newSeparator()
+
+  local optionsGroupId = "AttachmentSystem_OptionsGroup"
+  plugin:newMenuGroup{
+    id=optionsGroupId,
+    title="Options",
+    group=groupId
+  }
+
+
+  plugin:newCommand{
+    id="AttachmentSystem_ShowTilesID",
+    title="Show Attachment ID/Index",
+    group=optionsGroupId,
+    onclick=AttachmentSystem_ShowTilesID
+  }
+
+  plugin:newCommand{
+    id="AttachmentSystem_ShowUsage",
+    title="Show Attachment Usage",
+    group=optionsGroupId,
+    onclick=AttachmentSystem_ShowUsage
+  }
+
+  plugin:newCommand{
+    id="AttachmentSystem_ShowUnusedTilesSemitransparent",
+    title="Show Unused Attachments as Semitransparent",
+    group=optionsGroupId,
+    onclick=AttachmentSystem_ShowUnusedTilesSemitransparent
+  }
+
+  plugin:newCommand{
+    id="AttachmentSystem_ResetZoom",
+    title="Reset Attachment Window Zoom",
+    group=optionsGroupId,
+    onclick=AttachmentSystem_ResetZoom
   }
 
   showTilesID = plugin.preferences.showTilesID

@@ -18,5 +18,5 @@ it useful for your own game.
 
 ## Documentation
 
-We're going to provide some documentation/tutorial in the near future
-about how to use this plugin when the UX is more stable.
+You can find a work-in-progress documentation in
+[aseprite.github.io/Attachment-System](https://aseprite.github.io/Attachment-System)

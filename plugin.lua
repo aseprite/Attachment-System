@@ -1255,6 +1255,46 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   imi.repaint = true
 end
 
+local function show_tile_info(ti)
+  if showTilesID then
+    imi.alignFunc = function(cursor, size, lastBounds)
+      return Point(lastBounds.x+2,
+                   lastBounds.y+lastBounds.height-size.height-2)
+    end
+    imi.label(string.format("[%d]", ti))
+    imi.widget.color = Color(255, 255, 0)
+    imi.alignFunc = nil
+  end
+  if showTilesUsage then
+    local label
+    if tilesHistogram[ti] == nil then
+      label = "Unused"
+    else
+      label = tostring(tilesHistogram[ti])
+    end
+    imi.alignFunc = function(cursor, size, lastBounds)
+      return Point(lastBounds.x+2,
+                   lastBounds.y+2)
+    end
+    imi.label(label)
+    imi.widget.color = Color(255, 255, 0)
+    imi.alignFunc = nil
+  end
+
+  -- As the reference point is only in the base category, we have to
+  -- check its existence in the base category
+  local baseTileset = get_base_tileset(activeLayer)
+  if baseTileset:tile(ti).properties(PK).ref == nil then
+    imi.alignFunc = function(cursor, size, lastBounds)
+      return Point(lastBounds.x+lastBounds.width-size.width-2,
+                   lastBounds.y+2)
+    end
+    imi.label("R")
+    imi.widget.color = Color(255, 0, 0)
+    imi.alignFunc = nil
+  end
+end
+
 local function create_tile_view(folders, folder,
                                 index, ts, ti,
                                 inRc, outSize, itemPos)
@@ -1306,43 +1346,8 @@ local function create_tile_view(folders, folder,
     imi.widget.checked = false
   end
 
-  if showTilesID then
-    imi.alignFunc = function(cursor, size, lastBounds)
-      return Point(lastBounds.x+2,
-                   lastBounds.y+lastBounds.height-size.height-2)
-    end
-    imi.label(string.format("[%d]", ti))
-    imi.widget.color = Color(255, 255, 0)
-    imi.alignFunc = nil
-  end
-  if showTilesUsage then
-    local label
-    if tilesHistogram[ti] == nil then
-      label = "Unused"
-    else
-      label = tostring(tilesHistogram[ti])
-    end
-    imi.alignFunc = function(cursor, size, lastBounds)
-      return Point(lastBounds.x+2,
-                   lastBounds.y+2)
-    end
-    imi.label(label)
-    imi.widget.color = Color(255, 255, 0)
-    imi.alignFunc = nil
-  end
-
-  -- As the reference point is only in the base category, we have to
-  -- check its existence in the base category
-  local baseTileset = get_base_tileset(activeLayer)
-  if baseTileset:tile(ti).properties(PK).ref == nil then
-    imi.alignFunc = function(cursor, size, lastBounds)
-      return Point(lastBounds.x+lastBounds.width-size.width-2,
-                   lastBounds.y+2)
-    end
-    imi.label("R")
-    imi.widget.color = Color(255, 0, 0)
-    imi.alignFunc = nil
-  end
+  -- Show information about the tile (index, usage, R)
+  show_tile_info(ti)
 
   imi.popID()
   imi.widget = imageWidget
@@ -1650,8 +1655,6 @@ local function imi_ongui()
         imi.afterGui(show_options)
       end
 
-      imi.sameLine = false
-
       -- Active tile
 
       local ts = activeLayer.tileset
@@ -1664,17 +1667,11 @@ local function imi_ongui()
         local tileImg = ts:getTile(ti)
 
         -- Show active tile in active cel
+        imi.sameLine = false
         imi.image(tileImg, get_shrunken_bounds_of_image(tileImg), outSize, zoom)
-
         if ti > 0 then
-          imi.alignFunc = function(cursor, size, lastBounds)
-              return Point(lastBounds.x + 4,
-                           lastBounds.y + outSize.height - size.height - 4)
-            end
           imi.sameLine = true
-          imi.label(string.format("[%d]", ti))
-          imi.widget.color = Color(255, 255, 0)
-          imi.alignFunc = nil
+          show_tile_info(ti)
         end
 
         -- Context menu for active tile

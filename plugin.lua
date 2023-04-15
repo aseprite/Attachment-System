@@ -23,7 +23,6 @@ local shrunkenSize = Size(1, 1) -- Minimal size between all tiles of the active 
 local tilesHistogram = {} -- How many times each tile is used in the active layer
 local activeTileImageInfo = {} -- Used to re-calculate info when the tile image changes
 local focusedItem = nil        -- Folder + item with the keyboard focus
-local focusNewItem = nil       -- Used when a key is pressed to navigate and focus other folder item
 
 -- Plugin preferences
 local showTilesID = false

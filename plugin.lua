@@ -1703,8 +1703,12 @@ local function imi_ongui()
         imi.sameLine = false
         imi.image(tileImg, get_shrunken_bounds_of_image(tileImg), outSize, zoom)
         if ti > 0 then
-          imi.sameLine = true
-          show_tile_info(ti)
+          local imageWidget = imi.widget
+          do
+            imi.sameLine = true
+            show_tile_info(ti)
+          end
+          imi.widget = imageWidget
         end
 
         -- Context menu for active tile

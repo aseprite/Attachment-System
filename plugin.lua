@@ -2191,12 +2191,17 @@ local function AttachmentWindow_SwitchWindow()
   end
 end
 
-local function AttachmentSystem_FindNext(mode)
-  return function()
-    local ti = get_active_tile_index()
-    if ti then
-      find_next_attachment_usage(ti, mode)
-    end
+local function AttachmentSystem_FindNext()
+  local ti = get_active_tile_index()
+  if ti then
+    find_next_attachment_usage(ti, MODE_FORWARD)
+  end
+end
+
+local function AttachmentSystem_FindPrev()
+  local ti = get_active_tile_index()
+  if ti then
+    find_next_attachment_usage(ti, MODE_BACKWARDS)
   end
 end
 
@@ -2235,14 +2240,14 @@ function init(plugin)
     id="AttachmentSystem_NextAttachmentUsage",
     title="Find Next Attachment Usage",
     group=groupId,
-    onclick=AttachmentSystem_FindNext(MODE_FORWARD)
+    onclick=AttachmentSystem_FindNext
   }
 
   plugin:newCommand{
     id="AttachmentSystem_PrevAttachmentUsage",
     title="Find Previous Attachment Usage",
     group=groupId,
-    onclick=AttachmentSystem_FindNext(MODE_BACKWARDS)
+    onclick=AttachmentSystem_FindPrev
   }
 
   newSeparator()

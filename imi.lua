@@ -44,6 +44,8 @@
 --
 ----------------------------------------------------------------------
 
+local base = require 'base'
+
 local imi = {
   dlg = nil,
   uiScale = app.preferences.general.ui_scale,
@@ -326,9 +328,9 @@ local function getHScrollInfo(widget)
     pos = 0
   elseif widget.scrollableSize.width > 0 then
     len = fullLen * widget.viewportSize.width / widget.scrollableSize.width
-    len = imi.clamp(len, app.theme.dimension.scrollbar_size, fullLen)
+    len = base.clamp(len, app.theme.dimension.scrollbar_size, fullLen)
     pos = (fullLen-len) * pos / (widget.scrollableSize.width-widget.viewportSize.width)
-    pos = imi.clamp(pos, 0, fullLen-len)
+    pos = base.clamp(pos, 0, fullLen-len)
   else
     len = 0
     pos = 0
@@ -344,9 +346,9 @@ local function getVScrollInfo(widget)
     pos = 0
   elseif widget.scrollableSize.height > 0 then
     len = fullLen * widget.viewportSize.height / widget.scrollableSize.height
-    len = imi.clamp(len, app.theme.dimension.scrollbar_size, fullLen)
+    len = base.clamp(len, app.theme.dimension.scrollbar_size, fullLen)
     pos = (fullLen-len) * pos / (widget.scrollableSize.height-widget.viewportSize.height)
-    pos = imi.clamp(pos, 0, fullLen-len)
+    pos = base.clamp(pos, 0, fullLen-len)
   else
     len = 0
     pos = 0
@@ -427,11 +429,6 @@ end
 ----------------------------------------------------------------------
 -- Public API
 ----------------------------------------------------------------------
-
-function imi.clamp(value, min, max)
-  if value == nil then value = min end
-  return math.max(min, math.min(value, max))
-end
 
 function imi.init(values)
   imi.dlg = values.dialog
@@ -954,8 +951,8 @@ function imi.beginViewport(size, itemSize)
 
   function widget.setScrollPos(pos)
     local maxScrollPos = widget.scrollableSize - widget.viewportSize
-    pos.x = imi.clamp(pos.x, 0, maxScrollPos.width)
-    pos.y = imi.clamp(pos.y, 0, maxScrollPos.height)
+    pos.x = base.clamp(pos.x, 0, maxScrollPos.width)
+    pos.y = base.clamp(pos.y, 0, maxScrollPos.height)
 
     if widget.scrollPos ~= pos then
       widget.scrollPos = pos
@@ -986,7 +983,7 @@ function imi.beginViewport(size, itemSize)
       if widget.hoverHBar then
         local info = getHScrollInfo(widget)
         local pos = dragStartScrollBarPos + (imi.mousePos - dragStartMousePos)
-        pos.x = imi.clamp(pos.x, 0, info.fullLen - info.len)
+        pos.x = base.clamp(pos.x, 0, info.fullLen - info.len)
         scrollPos.x = maxScrollPos.width * pos.x / (info.fullLen - info.len)
       else
         scrollPos = dragStartScrollPos + (dragStartMousePos - imi.mousePos)
@@ -1000,7 +997,7 @@ function imi.beginViewport(size, itemSize)
       if widget.hoverVBar then
         local info = getVScrollInfo(widget)
         local pos = dragStartScrollBarPos + (imi.mousePos - dragStartMousePos)
-        pos.y = imi.clamp(pos.y, 0, info.fullLen - info.len)
+        pos.y = base.clamp(pos.y, 0, info.fullLen - info.len)
         scrollPos.y = maxScrollPos.height * pos.y / (info.fullLen - info.len)
       else
         scrollPos = dragStartScrollPos + (dragStartMousePos - imi.mousePos)

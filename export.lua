@@ -24,7 +24,7 @@ local spr = app.activeSprite
 if not spr then return print "No active sprite" end
 
 -- Modules
-local db = dofile('./db.lua')
+local db = require 'db'
 local fs = app.fs
 
 -- Constants

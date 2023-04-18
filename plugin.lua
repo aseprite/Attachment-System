@@ -1587,6 +1587,21 @@ local function show_options(rc)
   imi.repaint = true
 end
 
+local function AttachmentSystem_NewFolder()
+  if not activeLayer then return end
+
+  local folder = new_or_rename_folder_dialog()
+  if folder then
+    app.transaction("New Folder", function()
+      local layerProperties = db.getLayerProperties(activeLayer)
+      folders = layerProperties.folders
+      table.insert(folders, folder)
+      activeLayer.properties(PK).folders = folders
+    end)
+  end
+  imi.repaint = true
+end
+
 local function imi_ongui()
   local spr = app.activeSprite
   local folders
@@ -1672,15 +1687,7 @@ local function imi_ongui()
       end
 
       if imi.button("New Folder") then
-        imi.afterGui(
-          function()
-            local folder = new_or_rename_folder_dialog()
-            if folder then
-              table.insert(folders, folder)
-              activeLayer.properties(PK).folders = folders
-            end
-            imi.repaint = true
-          end)
+        imi.afterGui(AttachmentSystem_NewFolder)
       end
 
       new_layer_button()
@@ -2280,6 +2287,15 @@ function init(plugin)
     title="Select Focused Attachment",
     group=groupId,
     onclick=AttachmentSystem_SelectFocusedAttachment
+  }
+
+  newSeparator()
+
+  plugin:newCommand{
+    id="AttachmentSystem_NewFolder",
+    title="New Attachments Folder",
+    group=groupId,
+    onclick=AttachmentSystem_NewFolder
   }
 
   newSeparator()

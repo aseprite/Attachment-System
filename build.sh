@@ -4,9 +4,13 @@ version=$(cat package.json | grep "\"version\"" | sed 's/.*"version": "\(.*\)".*
 zip Attachment-System-$version.aseprite-extension \
     LICENSE.txt \
     README.md \
+    base.lua \
+    commands.lua \
     db.lua \
     default.aseprite-keys \
     export.lua \
     imi.lua \
+    main.lua \
     package.json \
-    plugin.lua
+    plugin.lua \
+    pref.lua

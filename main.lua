@@ -1575,15 +1575,12 @@ local function imi_ongui()
           -- Create a new tilemap with the grid bounds as the canvas
           -- bounds and a tileset with one empty tile to start
           -- painting.
-          local oldGrid = spr.gridBounds
-          spr.gridBounds = spr.bounds
-          app.command.NewLayer{ tilemap=true }
+          app.command.NewLayer{ tilemap=true, gridBounds=spr.bounds }
           activeTilemap = app.activeLayer
           folders = db.getLayerProperties(activeTilemap).folders
           spr:newTile(activeTilemap.tileset)
           db.setupSprite(spr)
           set_active_tile(1)
-          spr.gridBounds = oldGrid
         end)
     end
   end

@@ -29,6 +29,15 @@ function commands.FindPrev()
   main.findPrevAttachmentUsage()
 end
 
+function commands.InsertJoint()
+  app.editor:askPoint{
+    title="Click a pixel to specify a joint between parts",
+    onclick=function(ev)
+      -- TODO Use ev.point to create the refpoint <-> anchor relationship
+    end
+  }
+end
+
 function commands.AlignAnchors()
   main.alignAnchors()
 end
@@ -94,13 +103,14 @@ function commands.registerCommands(plugin)
     { newCommand="FindNext", title="Find Next Attachment Usage" },
     { newCommand="FindPrev", title="Find Previous Attachment Usage" },
     { newSeparator=true },
-    { newCommand="AlignAnchors", title="Align Anchors" },
-    { newSeparator=true },
     { newCommand="FocusPrevAttachment", title="Focus Previous Attachment" },
     { newCommand="FocusNextAttachment", title="Focus Next Attachment" },
     { newCommand="FocusAttachmentAbove", title="Focus Attachment Above" },
     { newCommand="FocusAttachmentBelow", title="Focus Attachment Below" },
     { newCommand="SelectFocusedAttachment", title="Select Focused Attachment" },
+    { newSeparator=true },
+    { newCommand="InsertJoint", title="Insert Joint" },
+    { newCommand="AlignAnchors", title="Align Anchors" },
     { newSeparator=true },
     { newCommand="NewFolder", title="New Attachments Folder" },
     { newSeparator=true },

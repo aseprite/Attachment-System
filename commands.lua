@@ -30,10 +30,20 @@ function commands.FindPrev()
 end
 
 function commands.InsertJoint()
+  local initialPoint = app.editor.spritePos
+
+  main.startSelectingJoint(initialPoint)
   app.editor:askPoint{
     title="Click a pixel to specify a joint between parts",
+    point=initialPoint,
     onclick=function(ev)
-      -- TODO Use ev.point to create the refpoint <-> anchor relationship
+      main.setPossibleJoint(ev.point)
+    end,
+    onchange=function(ev)
+      main.setPossibleJoint(ev.point)
+    end,
+    oncancel=function(en)
+      main.cancelJoint()
     end
   }
 end

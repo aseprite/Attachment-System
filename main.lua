@@ -25,6 +25,14 @@ local focusedItem = nil        -- Folder + item with the keyboard focus
 -- Constants
 local PK = db.PK
 local kUnnamedCategory = "(Unnamed)"
+local WindowState = {
+  NORMAL = 1,
+  SELECT_JOINT_POINT = 2,
+}
+
+-- Main window state
+local windowState = WindowState.NORMAL
+local possibleJoint = nil
 
 -- Dialog for Add/Remove anchor points
 local anchorActionsDlg
@@ -101,6 +109,22 @@ local function find_index(t, item)
     end
   end
   return nil
+end
+
+local function get_all_tilemap_layers()
+  local spr = app.sprite
+  local output = {}
+  local function for_layers(layers)
+    for _,layer in ipairs(layers) do
+      if layer.isGroup then
+        for_layers(layer.layers)
+      elseif layer.isTilemap then
+        table.insert(output, layer)
+      end
+    end
+  end
+  for_layers(spr.layers)
+  return output
 end
 
 -- As Image:shrinkBounds() can be quite slow, we cache as many calls as possible
@@ -1548,6 +1572,29 @@ local function show_options(rc)
   imi.repaint = true
 end
 
+local function get_possible_attachments(point)
+  local output = {}
+  local layers = get_all_tilemap_layers()
+  local mask = app.sprite.transparentColor
+  for _,layer in ipairs(layers) do
+    local cel = layer:cel(app.frame)
+    if cel and cel.image and cel.bounds:contains(point) then
+      local ts = layer.tileset
+      local ti = cel.image:getPixel(0, 0)
+      local tileImg = ts:getTile(ti)
+      local u = point - cel.position
+      if get_shrunken_bounds_of_image(tileImg):contains(u) then
+        table.insert(output, cel.layer)
+      end
+    end
+  end
+  return output
+end
+
+local function insert_joint(layerA, layerB, point)
+  -- TODO
+end
+
 function main.newFolder()
   if not activeTilemap then return end
 
@@ -1585,6 +1632,7 @@ local function imi_ongui()
     end
   end
 
+  -- No active sprite: Show a button to create a new sprite
   if not spr then
     dlg:modify{ title=title }
 
@@ -1597,8 +1645,13 @@ local function imi_ongui()
         imi.repaint = true
       end
     end
+
+  -- Temporal sprite? We are in some action with subsprites like Edit
+  -- Anchors or Edit Attachments
   elseif spr == tempSprite then
-    --do nothing
+    -- Do nothing
+
+  -- Old DB schema? Show a button to create the internal DB or update it
   elseif not spr.properties(PK).version or
          spr.properties(PK).version < db.kLatestDBVersion then
     local label
@@ -1614,6 +1667,43 @@ local function imi_ongui()
                       function() db.setupSprite(spr) end)
       imi.repaint = true
     end
+
+  -- Show options to create a joint between two layers in the current frame
+  elseif windowState == WindowState.SELECT_JOINT_POINT then
+
+    imi.sameLine = true
+    imi.label("Select Joint")
+    if possibleJoint then
+      local pt = possibleJoint
+      local attachments = get_possible_attachments(pt)
+
+      imi.label(pt.x .. "x" .. pt.y)
+      imi.sameLine = false
+
+      if #attachments >= 2 then
+        for i = 1,#attachments-1 do
+          local a = attachments[i]
+          local b = attachments[i+1]
+          local label = a.name .. " <-> " .. b.name
+          imi.pushID(i .. label)
+          if imi.button(label) then
+            insert_joint(a, b, pt)
+            main.cancelJoint()
+          end
+          imi.popID()
+        end
+      elseif #attachments == 1 then
+        imi.label("One attachment: " .. attachments[1].name)
+      else
+        imi.label("No attachments")
+      end
+
+      if imi.button("Cancel") then
+        main.cancelJoint()
+      end
+    end
+
+  -- Main UI to arrange and drag-and-drop attachments
   else
     dlg:modify{ title=title .. " - " .. app.fs.fileTitle(spr.filename) }
     if activeTilemap then
@@ -2113,6 +2203,37 @@ function main.findPrevAttachmentUsage()
   local ti = get_active_tile_index()
   if ti then
     find_next_attachment_usage(ti, MODE_BACKWARDS)
+  end
+end
+
+function main.startSelectingJoint(point)
+  if not dlg then
+    main.openDialog()
+  end
+
+  windowState = WindowState.SELECT_JOINT_POINT
+  possibleJoint = point
+  if dlg then
+    imi.repaint = true
+    dlg:repaint()
+  end
+end
+
+function main.setPossibleJoint(point)
+  possibleJoint = Point(point)
+  if dlg then
+    imi.repaint = true
+    dlg:repaint()
+  end
+end
+
+function main.cancelJoint()
+  app.editor:cancel()
+  windowState = WindowState.NORMAL
+  possibleJoint = nil
+  if dlg then
+    imi.repaint = true
+    dlg:repaint()
   end
 end
 

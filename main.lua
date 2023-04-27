@@ -352,7 +352,8 @@ function main.alignAnchors()
     if not movedLayers[childId] then
       table.insert(movedLayers, childId)
 
-      for fr=1,#spr.frames do
+      local fr = app.frame
+      do
         local parentCel = parent:cel(fr)
         local childCel = child:cel(fr)
         if parentCel and parentCel.image and

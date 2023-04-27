@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <keyboard version="1">
     <commands>
-        <key command="AttachmentSystem_FocusAttachmentAbove" shortcut="Ctrl+Up" />
-        <key command="AttachmentSystem_FocusAttachmentBelow" shortcut="Ctrl+Down" />
-        <key command="AttachmentSystem_FocusNextAttachment" shortcut="Ctrl+Right" />
-        <key command="AttachmentSystem_FocusPrevAttachment" shortcut="Ctrl+Left" />
-        <key command="AttachmentSystem_SelectFocusedAttachment" shortcut="Ctrl+Enter" />
+        <!-- Space+F1 to switch window -->
+        <key command="AttachmentSystem_SwitchWindow" shortcut="Space+F1" />
+        <!-- Space+QE to find attachments -->
+        <key command="AttachmentSystem_FindPrev" shortcut="Space+Q" />
+        <key command="AttachmentSystem_FindNext" shortcut="Space+E" />
+        <!-- Space+WASD to navigate attachments -->
+        <key command="AttachmentSystem_FocusAttachmentAbove" shortcut="Space+W" />
+        <key command="AttachmentSystem_FocusPrevAttachment" shortcut="Space+A" />
+        <key command="AttachmentSystem_FocusAttachmentBelow" shortcut="Space+S" />
+        <key command="AttachmentSystem_FocusNextAttachment" shortcut="Space+D" />
+        <!-- Space+Z align anchors, Space+X to insert joint, Space+C to put attachment -->
+        <key command="AttachmentSystem_AlignAnchors" shortcut="Space+Z" />
+        <key command="AttachmentSystem_SelectFocusedAttachment" shortcut="Space+C" />
+        <key command="AttachmentSystem_InsertJoint" shortcut="Space+X" />
     </commands>
 </keyboard>

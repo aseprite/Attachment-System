@@ -30,9 +30,7 @@ function commands.FindPrev()
 end
 
 function commands.InsertJoint()
-  local initialPoint = app.editor.spritePos
-
-  main.startSelectingJoint(initialPoint)
+  local initialPoint = main.startSelectingJoint()
   app.editor:askPoint{
     title="Click a pixel to specify a joint between parts",
     point=initialPoint,

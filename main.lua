@@ -463,9 +463,13 @@ local function get_active_tile_image()
   return nil
 end
 
-local function get_active_tile_index()
-  if activeTilemap then
-    local cel = activeTilemap:cel(app.activeFrame)
+-- layer can be nil and the activeTilemap will be used
+local function get_active_tile_index(layer)
+  if not layer then
+    layer = activeTilemap
+  end
+  if layer and layer.isTilemap then
+    local cel = layer:cel(app.frame)
     if cel and cel.image then
       return cel.image:getPixel(0, 0)
     end
@@ -1592,8 +1596,56 @@ local function get_possible_attachments(point)
   return output
 end
 
+local function get_anchor_point_for_layer(ts, ti, layerId)
+  local anchors = ts:tile(ti).properties(PK).anchors
+  if anchors then
+    for _,a in ipairs(anchors) do
+      if a.layerId == layerId then
+        return a.position
+      end
+    end
+  end
+  return nil
+end
+
+local function set_anchor_point(ts, ti, layerId, point)
+  local done = false
+  local anchors = ts:tile(ti).properties(PK).anchors
+  if not anchors then anchors = {} end
+  for i=1,#anchors do
+    if anchors[i].layerId == layerId then
+      anchors[i].position = point
+      done = true
+      break
+    end
+  end
+  if not done then
+    table.insert(anchors, { layerId=layerId, position=point })
+  end
+  ts:tile(ti).properties(PK).anchors = anchors
+end
+
+local function set_ref_point(ts, ti, point)
+  ts:tile(ti).properties(PK).ref = point
+end
+
 local function insert_joint(layerA, layerB, point)
-  -- TODO
+  app.transaction("Insert Joint", function()
+    local spr = app.sprite
+    assert(spr)
+
+    local idA = layerA.properties(PK).id
+    local idB = layerB.properties(PK).id
+    local tsA = layerA.tileset
+    local tsB = layerB.tileset
+    local celA = layerA:cel(app.frame)
+    local celB = layerB:cel(app.frame)
+    local tiA = celA.image:getPixel(0, 0)
+    local tiB = celB.image:getPixel(0, 0)
+
+    set_anchor_point(tsA, tiA, idB, point - celA.position)
+    set_ref_point(tsB, tiB, point - celB.position)
+  end)
 end
 
 function main.newFolder()
@@ -2207,9 +2259,33 @@ function main.findPrevAttachmentUsage()
   end
 end
 
-function main.startSelectingJoint(point)
+function main.startSelectingJoint()
   if not dlg then
     main.openDialog()
+  end
+
+  -- Get possible point to insert the joint, first the mouse position
+  -- in sprite coordinates, then we check if the active
+  -- attachment/parent already have an anchor point for the active
+  -- layer.
+  local point = app.editor.spritePos
+  if activeTilemap then
+    local child = activeTilemap
+    local childId = child.properties(PK).id
+    local attachments = get_possible_attachments(point)
+    local anchorPoins = nil
+    for i=1,#attachments do
+      if attachments[i] ~= child then
+        anchorPoint =
+          get_anchor_point_for_layer(attachments[i].tileset,
+                                     get_active_tile_index(attachments[i]),
+                                     childId)
+        if anchorPoint then
+          point = anchorPoint
+          break
+        end
+      end
+    end
   end
 
   windowState = WindowState.SELECT_JOINT_POINT
@@ -2218,6 +2294,8 @@ function main.startSelectingJoint(point)
     imi.repaint = true
     dlg:repaint()
   end
+
+  return point
 end
 
 function main.setPossibleJoint(point)

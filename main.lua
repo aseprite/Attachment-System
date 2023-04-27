@@ -2255,6 +2255,7 @@ function main.openDialog()
   }
   :canvas{ id="canvas",
            width=400*imi.uiScale, height=300*imi.uiScale,
+           autoScaling=false,
            onpaint=imi.onpaint,
            onkeydown=canvas_onkeydown,
            onmousemove=imi.onmousemove,

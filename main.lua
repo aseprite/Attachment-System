@@ -301,6 +301,39 @@ local function find_empty_spot_position(folder, ti)
   return itemPos
 end
 
+local function get_anchor_point_for_layer(ts, ti, layerId)
+  local anchors = ts:tile(ti).properties(PK).anchors
+  if anchors then
+    for _,a in ipairs(anchors) do
+      if a.layerId == layerId then
+        return a.position
+      end
+    end
+  end
+  return nil
+end
+
+local function set_anchor_point(ts, ti, layerId, point)
+  local done = false
+  local anchors = ts:tile(ti).properties(PK).anchors
+  if not anchors then anchors = {} end
+  for i=1,#anchors do
+    if anchors[i].layerId == layerId then
+      anchors[i].position = point
+      done = true
+      break
+    end
+  end
+  if not done then
+    table.insert(anchors, { layerId=layerId, position=point })
+  end
+  ts:tile(ti).properties(PK).anchors = anchors
+end
+
+local function set_ref_point(ts, ti, point)
+  ts:tile(ti).properties(PK).ref = point
+end
+
 -- Matches defined reference points <-> anchor points from parent to
 -- children
 function main.alignAnchors()
@@ -365,19 +398,7 @@ function main.alignAnchors()
 
           local refPoint = childTs:tile(childTi).properties(PK).ref
           if refPoint then
-            local anchorPoint = nil
-            local anchors = parentTs:tile(parentTi).properties(PK).anchors
-            if anchors and #anchors >= 1 then
-              for i=1,#anchors do
-                local auxLayer = find_layer_by_id(spr.layers, anchors[i].layerId)
-                if auxLayer then
-                  if anchors[i].layerId == childId then
-                    anchorPoint = anchors[i].position
-                    break
-                  end
-                end
-              end
-            end
+            local anchorPoint = get_anchor_point_for_layer(parentTs, parentTi, childId)
             if anchorPoint then
               -- Align refPoint with anchorPoint
               childCel.position =
@@ -1594,39 +1615,6 @@ local function get_possible_attachments(point)
     end
   end
   return output
-end
-
-local function get_anchor_point_for_layer(ts, ti, layerId)
-  local anchors = ts:tile(ti).properties(PK).anchors
-  if anchors then
-    for _,a in ipairs(anchors) do
-      if a.layerId == layerId then
-        return a.position
-      end
-    end
-  end
-  return nil
-end
-
-local function set_anchor_point(ts, ti, layerId, point)
-  local done = false
-  local anchors = ts:tile(ti).properties(PK).anchors
-  if not anchors then anchors = {} end
-  for i=1,#anchors do
-    if anchors[i].layerId == layerId then
-      anchors[i].position = point
-      done = true
-      break
-    end
-  end
-  if not done then
-    table.insert(anchors, { layerId=layerId, position=point })
-  end
-  ts:tile(ti).properties(PK).anchors = anchors
-end
-
-local function set_ref_point(ts, ti, point)
-  ts:tile(ti).properties(PK).ref = point
 end
 
 local function insert_joint(layerA, layerB, point)

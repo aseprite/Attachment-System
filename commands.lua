@@ -74,6 +74,10 @@ function commands.NewFolder()
   main.newFolder()
 end
 
+function commands.ShowHierarchy()
+  main.showHierarchy()
+end
+
 function commands.ShowTilesID()
   if not main.hasDialog() then return end
   pref.showTilesID = not pref.showTilesID

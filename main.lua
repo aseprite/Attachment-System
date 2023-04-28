@@ -28,6 +28,7 @@ local kUnnamedCategory = "(Unnamed)"
 local WindowState = {
   NORMAL = 1,
   SELECT_JOINT_POINT = 2,
+  HIERARCHY_VIEW = 3,
 }
 
 -- Main window state
@@ -334,42 +335,40 @@ local function set_ref_point(ts, ti, point)
   ts:tile(ti).properties(PK).ref = point
 end
 
--- Matches defined reference points <-> anchor points from parent to
--- children
-function main.alignAnchors()
-  local spr = app.activeSprite
-  if not spr then return end
-
-  local hierarchy = {}
-  local function create_layers_hierarchy(layers)
-    for i=1,#layers do
-      local layer = layers[i]
-      if layer.isTilemap then
-        local layerProperties = layer.properties(PK)
-        if layerProperties.id then
-          local ts = get_base_tileset(layer)
-          for ti=1,#ts-1 do
-            local anchors = ts:tile(ti).properties(PK).anchors
-            if anchors then
-              for j=1,#anchors do
-                local auxLayer = find_layer_by_id(spr.layers, anchors[j].layerId)
-                if auxLayer then
-                  local childId = anchors[j].layerId
-                  if childId then
-                    hierarchy[childId] = layerProperties.id
-                  end
-                end
+local function create_layers_hierarchy(layers, simple_hierarchy)
+  for i=1,#layers do
+    local layer = layers[i]
+    if layer.isTilemap then
+      local layerProperties = layer.properties(PK)
+      if layerProperties.id then
+        local ts = get_base_tileset(layer)
+        local ti = 1          -- TODO use all tiles?
+        local anchors = ts:tile(ti).properties(PK).anchors
+        if anchors and #anchors >= 1 then
+          for j=1,#anchors do
+            local auxLayer = find_layer_by_id(layers, anchors[j].layerId)
+            if auxLayer then
+              local childId = anchors[j].layerId
+              if childId then
+                simple_hierarchy[childId] = layerProperties.id
               end
             end
           end
         end
       end
-      if layer.isGroup then
-        create_layers_hierarchy(layer.layers)
-      end
+    end
+    if layer.isGroup then
+      create_layers_hierarchy(layer.layers, simple_hierarchy)
     end
   end
-  create_layers_hierarchy(spr.layers)
+end
+
+function main.alignAnchors()
+  local spr = app.activeSprite
+  if not spr then return end
+
+  local hierarchy = {}
+  create_layers_hierarchy(spr.layers, hierarchy)
 
   local movedLayers = {}
   local function align_layer(childId, parentId, tab)
@@ -386,8 +385,7 @@ function main.alignAnchors()
     if not movedLayers[childId] then
       table.insert(movedLayers, childId)
 
-      local fr = app.frame
-      do
+      for fr=1,#spr.frames do
         local parentCel = parent:cel(fr)
         local childCel = child:cel(fr)
         if parentCel and parentCel.image and
@@ -1336,6 +1334,134 @@ local function show_tile_info(ti)
   end
 end
 
+-- Returns vector of childId's which corresponding layer hasn't child
+local function find_end_children(simple_hierarchy)
+  local endChildren = {}
+  for child=1, #simple_hierarchy, 1 do
+    local endChildrenFound = true
+    for i=1, #simple_hierarchy, 1 do
+      if simple_hierarchy[i] == child then
+        endChildrenFound = false
+        break
+      end
+    end
+    if endChildrenFound then
+      table.insert(endChildren, child)
+    end
+  end
+  return endChildren
+end
+
+local function create_inheritance_line(simple_hierarchy, inheritance_vector)
+  local endChild = simple_hierarchy[inheritance_vector[#inheritance_vector]]
+  if endChild then
+    table.insert(inheritance_vector, endChild)
+    inheritance_vector = create_inheritance_line(simple_hierarchy, inheritance_vector)
+  end
+  return inheritance_vector
+end
+
+local function reverse(vector)
+    local reversed = {}
+    for k, v in ipairs(vector) do
+        reversed[#vector + 1 - k] = v
+    end
+    return reversed
+end
+
+local function create_inheritance_lines(simple_hierarchy)
+  local endChildren = find_end_children(simple_hierarchy)
+  local inheritanceLines = {}
+  for i=1, #endChildren, 1 do
+    table.insert(inheritanceLines,
+      reverse(create_inheritance_line(simple_hierarchy, { endChildren[i] })))
+  end
+  return inheritanceLines
+end
+
+function sort_tree_by_level(hierarchy_tree, level)
+  for i = 1, #hierarchy_tree - 1 do
+    local minIndex = i
+    for j = i + 1, #hierarchy_tree do
+      if hierarchy_tree[j][level] and hierarchy_tree[minIndex][level] then
+        if hierarchy_tree[j][level] < hierarchy_tree[minIndex][level] then
+          minIndex = j
+        end
+      end
+    end
+    if minIndex ~= i then
+      if level > 1 and minIndex > 1 and
+         hierarchy_tree[minIndex][level-1] == hierarchy_tree[i][level-1] then
+        hierarchy_tree[i], hierarchy_tree[minIndex] = hierarchy_tree[minIndex], hierarchy_tree[i]
+      end
+    end
+  end
+end
+
+local function sort_inheritance_lines(hierarchy_tree)
+  local maxLevel = 1
+  for i=1, #hierarchy_tree, 1 do
+    if #hierarchy_tree[i] > maxLevel then
+      maxLevel = #hierarchy_tree[i]
+    end
+  end
+  for level=1, maxLevel, 1 do
+    sort_tree_by_level(hierarchy_tree, level)
+  end
+end
+
+local function create_hierarchy_view(layers)
+  local simple_hierarchy = {}
+  create_layers_hierarchy(layers, simple_hierarchy)
+  -- Create hierarchy lines { child1 > parent > parent of parent,
+  --                          child2 > parent,
+  --                          child3 > parent > parent of parent, ... }
+  local hierarchy_tree = create_inheritance_lines(simple_hierarchy)
+  sort_inheritance_lines(hierarchy_tree)
+  -- This function finds amount of spaces according to
+  -- the level which is observed in a given 'hierarchy line'
+  local function fixedSpacesCount(tree, line)
+    local matchCount = 0
+    if line > 1 and line <= #tree then
+      for i=1, #tree[line], 1 do
+        if tree[line][i] and tree[line-1][i] then
+          if tree[line][i] == tree[line-1][i] then
+            matchCount = matchCount + 1
+          end
+        end
+      end
+    end
+    return matchCount
+  end
+
+  imi.sameLine = false
+  for i=1, #hierarchy_tree, 1 do
+    local spaces = fixedSpacesCount(hierarchy_tree, i)
+    local additionalSpaces = 0
+    for j=1, #hierarchy_tree[i], 1 do
+      imi.pushID(i .. "," .. j)
+      if  j == 1 and spaces == 0 then
+        if imi.button(find_layer_by_id(layers, hierarchy_tree[i][j]).name) then
+
+        end
+        imi.sameLine = false
+        spaces = spaces + 1
+      elseif j > spaces then
+        if spaces + additionalSpaces > 0 then
+          imi.space(20 * (spaces + additionalSpaces))
+          imi.sameLine = true
+        end
+        if imi.button(find_layer_by_id(layers, hierarchy_tree[i][j]).name) then
+
+        end
+        imi.sameLine = false
+        additionalSpaces = additionalSpaces + 1
+      end
+      imi.popID()
+    end
+  end
+end
+
 local function create_tile_view(folders, folder,
                                 index, ts, ti,
                                 inRc, outSize, itemPos)
@@ -1652,6 +1778,13 @@ function main.newFolder()
   imi.repaint = true
 end
 
+function main.showHierarchy()
+  if not activeTilemap then return end
+
+  windowState = WindowState.HIERARCHY_VIEW
+  dlg:repaint()
+end
+
 local function imi_ongui()
   local spr = app.activeSprite
   local folders
@@ -1744,6 +1877,18 @@ local function imi_ongui()
         main.cancelJoint()
       end
     end
+  elseif windowState == WindowState.HIERARCHY_VIEW then
+    if imi.button("OK") then
+      imi.afterGui(
+        function()
+          windowState = WindowState.NORMAL
+          dlg:repaint()
+        end)
+    end
+    imi.sameLine = false
+    imi.space(40)
+    imi.sameLine = false
+    create_hierarchy_view(spr.layers)
 
   -- Main UI to arrange and drag-and-drop attachments
   else
@@ -1783,6 +1928,10 @@ local function imi_ongui()
       new_layer_button()
       if imi.button("Options") then
         imi.afterGui(show_options)
+      end
+
+      if imi.button("Hierarchy") then
+        imi.afterGui(commands.ShowHierarchy)
       end
 
       -- Active tile

@@ -1636,8 +1636,8 @@ local function insert_joint(layerA, layerB, point)
 
     local idA = layerA.properties(PK).id
     local idB = layerB.properties(PK).id
-    local tsA = layerA.tileset
-    local tsB = layerB.tileset
+    local tsA = get_base_tileset(layerA)
+    local tsB = get_base_tileset(layerB)
     local celA = layerA:cel(app.frame)
     local celB = layerB:cel(app.frame)
     local tiA = celA.image:getPixel(0, 0)

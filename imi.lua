@@ -885,9 +885,7 @@ function imi.image(image, srcRect, dstSize, scale, alpha)
                                   w, h))
           ctx:restore()
 
-          if widget.pressed or
-             widget.checked or
-             widget.focused then
+          if widget.focused then
             ctx:drawThemeRect('colorbar_selection_hot',
                               widget.bounds)
           elseif widget.hover then

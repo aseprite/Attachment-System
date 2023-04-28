@@ -21,6 +21,7 @@ local shrunkenSize = Size(1, 1) -- Minimal size between all tiles of the active 
 local tilesHistogram = {} -- How many times each tile is used in the active layer
 local activeTileImageInfo = {} -- Used to re-calculate info when the tile image changes
 local focusedItem = nil        -- Folder + item with the keyboard focus
+local focusFolderItem = nil
 
 -- Constants
 local PK = db.PK
@@ -485,10 +486,18 @@ local function get_active_tile_image()
   return nil
 end
 
--- layer can be nil and the activeTilemap will be used
+-- Returns the active tile index (ti) to apply a command (e.g. Find
+-- Prev/Next Usage) or the active item in the given layer.
+--
+-- When no layer is specified, it will try to return the focusedItem
+-- or the activeTilemap tile.
 local function get_active_tile_index(layer)
   if not layer then
     layer = activeTilemap
+    -- If there is a focused item, we'll return that one
+    if focusedItem then
+      return focusedItem.tile
+    end
   end
   if layer and layer.isTilemap then
     local cel = layer:cel(app.frame)
@@ -2211,6 +2220,14 @@ local function App_sitechange(ev)
       tilesHistogram = calculate_tiles_histogram(activeTilemap)
     else
       shrunkenBounds = Rectangle()
+    end
+
+    -- Unfocus items as we've changed the active layer
+    focusedItem = nil
+    focusFolderItem = nil
+    if imi.focusedWidget then
+      imi.focusedWidget.focused = false
+      imi.focusedWidget = nil
     end
   end
 

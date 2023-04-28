@@ -348,15 +348,16 @@ function main.alignAnchors()
         local layerProperties = layer.properties(PK)
         if layerProperties.id then
           local ts = get_base_tileset(layer)
-          local ti = 1          -- TODO use all tiles?
-          local anchors = ts:tile(ti).properties(PK).anchors
-          if anchors and #anchors >= 1 then
-            for j=1,#anchors do
-              local auxLayer = find_layer_by_id(spr.layers, anchors[j].layerId)
-              if auxLayer then
-                local childId = anchors[j].layerId
-                if childId then
-                  hierarchy[childId] = layerProperties.id
+          for ti=1,#ts-1 do
+            local anchors = ts:tile(ti).properties(PK).anchors
+            if anchors then
+              for j=1,#anchors do
+                local auxLayer = find_layer_by_id(spr.layers, anchors[j].layerId)
+                if auxLayer then
+                  local childId = anchors[j].layerId
+                  if childId then
+                    hierarchy[childId] = layerProperties.id
+                  end
                 end
               end
             end

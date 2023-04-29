@@ -1804,18 +1804,65 @@ local function imi_ongui()
       end
       do
         local tileImg = ts:getTile(ti)
+        -- Get the tile from the base tileset to get ref/anchor points
+        local tile = get_base_tileset(activeTilemap):tile(ti)
+
+        -- Tile preview + ref/anchors point buttons
+        imi.sameLine = false
+        imi.beginGroup()
 
         -- Show active tile in active cel
-        imi.sameLine = false
         imi.image(tileImg, get_shrunken_bounds_of_image(tileImg), outSize, pref.zoom)
+        local imageWidget = imi.widget
         if ti > 0 then
-          local imageWidget = imi.widget
           do
             imi.sameLine = true
             show_tile_info(ti)
           end
           imi.widget = imageWidget
         end
+
+        -- Buttons to change points
+        imi.sameLine = false
+        if tile.properties(PK).ref then
+          if imi.button("RefPoint") then
+            local origin = cel.position
+            app.editor:askPoint{
+              title="Change Ref Point",
+              point=tile.properties(PK).ref + origin,
+              onclick=function(ev)
+                app.transaction("Change Ref Point", function()
+                  tile.properties(PK).ref = ev.point - origin
+                end)
+              end
+            }
+          end
+        end
+        if tile.properties(PK).anchors then
+          local anchors = tile.properties(PK).anchors
+          for i=1,#anchors do
+            local child = find_layer_by_id(spr.layers, anchors[i].layerId)
+            if child then
+              imi.pushID(layerId)
+              if imi.button("+" .. child.name) then
+                local origin = cel.position
+                app.editor:askPoint{
+                  title="Change Anchor Point for Layer " .. child.name,
+                  point=anchors[i].position + origin,
+                  onclick=function(ev)
+                    app.transaction("Change Anchor Point", function()
+                      anchors[i].position = ev.point - origin
+                      tile.properties(PK).anchors = anchors
+                    end)
+                  end
+                }
+              end
+              imi.popID(layerId)
+            end
+          end
+        end
+        imi.endGroup()
+        imi.widget = imageWidget
 
         -- Context menu for active tile
         imi.widget.onmousedown = function(widget)
@@ -2238,6 +2285,9 @@ local function App_sitechange(ev)
   else
     activeTileImageInfo = {}
   end
+
+  -- Cancel any "select point" state
+  main.cancelJoint()
 
   if not imi.isongui and not ev.fromUndo then
     dlg:repaint() -- TODO repaint only when it's needed

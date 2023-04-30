@@ -2363,7 +2363,9 @@ function main.setPossibleJoint(point)
 end
 
 function main.cancelJoint()
-  app.editor:cancel()
+  if app.editor then
+    app.editor:cancel()
+  end
   windowState = WindowState.NORMAL
   possibleJoint = nil
   if dlg then

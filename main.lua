@@ -1665,6 +1665,8 @@ local function imi_ongui()
   local spr = app.activeSprite
   local folders
 
+  imi.sameLine = true
+
   function new_layer_button()
     if imi.button("New Layer") then
       app.transaction(
@@ -1712,7 +1714,6 @@ local function imi_ongui()
       label = "Update Sprite Structure"
     end
 
-    imi.sameLine = true
     if imi.button(label) then
       app.transaction("Setup Attachment System",
                       function() db.setupSprite(spr) end)
@@ -1722,7 +1723,6 @@ local function imi_ongui()
   -- Show options to create a joint between two layers in the current frame
   elseif windowState == WindowState.SELECT_JOINT_POINT then
 
-    imi.sameLine = true
     imi.label("Select Joint")
     if possibleJoint then
       local pt = possibleJoint

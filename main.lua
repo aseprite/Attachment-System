@@ -1658,7 +1658,7 @@ function main.newFolder()
       activeTilemap.properties(PK).folders = folders
     end)
   end
-  imi.repaint = true
+  imi.dlg:repaint()
 end
 
 local function imi_ongui()
@@ -1682,6 +1682,7 @@ local function imi_ongui()
           db.setupSprite(spr)
           set_active_tile(1)
         end)
+      imi.dlg:repaint()
     end
   end
 
@@ -1695,7 +1696,7 @@ local function imi_ongui()
       if spr then
         app.transaction("Setup Attachment System",
                         function() db.setupSprite(spr) end)
-        imi.repaint = true
+        imi.dlg:repaint()
       end
     end
 

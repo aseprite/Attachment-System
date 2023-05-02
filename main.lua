@@ -1842,7 +1842,8 @@ local function imi_ongui()
         if tile.properties(PK).anchors then
           local anchors = tile.properties(PK).anchors
           for i=1,#anchors do
-            local child = find_layer_by_id(spr.layers, anchors[i].layerId)
+            local layerId = anchors[i].layerId
+            local child = find_layer_by_id(spr.layers, layerId)
             if child then
               imi.pushID(layerId)
               if imi.button("+" .. child.name) then

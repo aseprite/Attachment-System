@@ -1844,6 +1844,7 @@ local function imi_ongui()
           for i=1,#anchors do
             local child = find_layer_by_id(spr.layers, anchors[i].layerId)
             if child then
+              local layerId = anchors[i].layerId
               imi.pushID(layerId)
               if imi.button("+" .. child.name) then
                 local origin = cel.position

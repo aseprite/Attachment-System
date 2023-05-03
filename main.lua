@@ -434,11 +434,11 @@ end
 -- or the activeTilemap tile.
 local function get_active_tile_index(layer)
   if not layer then
-    layer = activeTilemap
     -- If there is a focused item, we'll return that one
     if focusedItem then
       return focusedItem.tile
     end
+    layer = activeTilemap
   end
   if layer and layer.isTilemap then
     local cel = layer:cel(app.frame)
@@ -447,6 +447,25 @@ local function get_active_tile_index(layer)
     end
   end
   return nil
+end
+
+-- Returns all folders of the active tilemap + the active (focused) folder.
+-- Usage:
+--   folders, folder = get_active_folder()
+local function get_active_folder()
+  if activeTilemap and focusedItem then
+    local folders = activeTilemap.properties(PK).folders
+    local folder
+    for i=1,#folders do
+      if folders[i].name == focusedItem.folder then
+        folder = folders[i]
+        break
+      end
+    end
+    return folders, folder
+  else
+    return nil, nil
+  end
 end
 
 local function set_active_tile(ti)
@@ -613,129 +632,165 @@ local function remove_tiles_from_folders(folders, ti)
   end
 end
 
+local function for_each_category_tileset(func)
+  assert(activeTilemap)
+  local spr = activeTilemap.sprite
+  for i,categoryID in ipairs(activeTilemap.properties(PK).categories) do
+    local catTileset = db.findTilesetByCategoryID(spr, categoryID)
+    func(catTileset)
+  end
+end
+
+local function add_in_folder_and_base_set(folders, folder, ti)
+  assert(activeTilemap)
+  if folder then
+    table.insert(folder.items, { tile=ti, position=find_empty_spot_position(folder, ti) })
+  end
+  -- Add the tile in the Base Set folder (always)
+  if not folder or not db.isBaseSetFolder(folder) then
+    local baseSet = db.getBaseSetFolder(activeTilemap, folders)
+    table.insert(baseSet.items, { tile=ti, position=find_empty_spot_position(baseSet, ti) })
+  end
+  activeTilemap.properties(PK).folders = folders
+end
+
+local function is_unused_tile(ti)
+  return tilesHistogram[ti] == nil
+end
+
+function main.newEmptyAttachment()
+  local spr = activeTilemap.sprite
+  local ts = activeTilemap.tileset
+  local ti = get_active_tile_index()
+  local folders, folder = get_active_folder()
+
+  -- TODO is it really needed to copy these anchors to the new empty attachment?
+  local auxAnchors = {}
+  local defaultPos = Point(ts.grid.tileSize.width/2, ts.grid.tileSize.height/2)
+  local anchors = ts:tile(1).properties(PK).anchors
+  if anchors and #anchors >= 1 then
+    for i=1, #anchors, 1 do
+      table.insert(auxAnchors, {layerId=anchors[i].layerId,
+                                position=defaultPos})
+    end
+  end
+
+  app.transaction("New Empty Attachment", function()
+    local tile
+    for_each_category_tileset(function(ts)
+      local t = spr:newTile(ts)
+      if tile == nil then
+        tile = t
+      else
+        assert(t.index == t.index)
+      end
+      t.properties(PK).anchors = auxAnchors
+    end)
+    if folders and folder and tile then
+      add_in_folder_and_base_set(folders, folder, tile.index)
+    end
+  end)
+  imi.dlg:repaint()
+end
+
+function main.duplicateAttachment()
+  assert(activeTilemap)
+  local spr = activeTilemap.sprite
+  local ts = activeTilemap.tileset
+  local ti = get_active_tile_index()
+  local folders, folder = get_active_folder()
+  local origTile = ts:tile(ti)
+  app.transaction("Duplicate Attachment", function()
+    local tile
+    for_each_category_tileset(function(ts)
+      tile = spr:newTile(ts)
+      tile.image:clear()
+      tile.image:drawImage(ts:tile(ti).image)
+      tile.properties(PK).anchors = ts:tile(ti).properties(PK).anchors
+    end)
+
+    -- Copy ref point in the base tileset
+    local baseTileset = get_base_tileset(activeTilemap)
+    baseTileset:tile(#baseTileset-1).properties(PK).ref =
+      baseTileset:tile(ti).properties(PK).ref
+
+    if folders and folder and tile then
+      add_in_folder_and_base_set(folders, folder, tile.index)
+    end
+  end)
+  imi.dlg:repaint()
+end
+
+function main.deleteAttachment()
+  local spr = activeTilemap.sprite
+  local ti = get_active_tile_index()
+  local folders, folder = get_active_folder()
+  local indexInFolder
+  if focusedItem then
+    indexInFolder = focusedItem.index
+  end
+
+  local repeatedTiOnBaseFolder = false
+  if folder and db.isBaseSetFolder(folder) then
+    repeatedTiOnBaseFolder = (count_folder_items_with_tile(folder, ti) > 1)
+  end
+  if folder and (not db.isBaseSetFolder(folder) or
+                 repeatedTiOnBaseFolder or
+                 is_unused_tile(ti)) then
+    app.transaction("Delete Attachment", function()
+      if db.isBaseSetFolder(folder) and
+        not repeatedTiOnBaseFolder and is_unused_tile(ti) then
+        for_each_category_tileset(function(ts)
+            spr:deleteTile(ts, ti)
+        end)
+
+        -- Remap tiles in all tilemaps
+        remap_tiles_in_tilemap_layer_delete_index(activeTilemap, ti)
+
+        remove_tiles_from_folders(folders, ti)
+      else
+        remove_tile_from_folder_by_index(folder, indexInFolder)
+      end
+      activeTilemap.properties(PK).folders = folders
+    end)
+    imi.dlg:repaint()
+  end
+end
+
+-- Select all the active layers' frames where the selected attachment
+-- is used.
+function main.highlightUsage()
+  local ti = get_active_tile_index()
+  local frames = {}
+  for _,cel in ipairs(activeTilemap.cels) do
+    if cel.image then
+      local celTi = cel.image:getPixel(0, 0)
+      if celTi == ti then
+        table.insert(frames, cel.frameNumber)
+      end
+    end
+  end
+  app.range.frames = frames
+end
+
 local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   local popup = Dialog{ parent=imi.dlg }
-  local spr = activeTilemap.sprite
 
-  local function is_unused_tile(tileIndex)
-    return tilesHistogram[tileIndex] == nil
-  end
-
-  local function forEachCategoryTileset(func)
-    for i,categoryID in ipairs(activeTilemap.properties(PK).categories) do
-      local catTileset = db.findTilesetByCategoryID(spr, categoryID)
-      func(catTileset)
-    end
-  end
-
-  local function addInFolderAndBaseSet(ti)
-    if folder then
-      table.insert(folder.items, { tile=ti, position=find_empty_spot_position(folder, ti) })
-    end
-    -- Add the tile in the Base Set folder (always)
-    if not folder or not db.isBaseSetFolder(folder) then
-      local baseSet = db.getBaseSetFolder(activeTilemap, folders)
-      table.insert(baseSet.items, { tile=ti, position=find_empty_spot_position(baseSet, ti) })
-    end
-    activeTilemap.properties(PK).folders = folders
-  end
-
-  local function newEmpty()
-    local auxAnchors = {}
-    local defaultPos = Point(ts.grid.tileSize.width/2, ts.grid.tileSize.height/2)
-    local anchors = ts:tile(1).properties(PK).anchors
-    if anchors and #anchors >= 1 then
-      for i=1, #anchors, 1 do
-        table.insert(auxAnchors, {layerId=anchors[i].layerId,
-                                  position=defaultPos})
-      end
-    end
-    app.transaction("New Empty Attachment",
-      function()
-        local tile
-        forEachCategoryTileset(
-          function(ts)
-            local t = spr:newTile(ts)
-            if tile == nil then
-              tile = t
-            else
-              assert(t.index == t.index)
-            end
-            t.properties(PK).anchors = auxAnchors
-          end)
-
-        if tile then
-          addInFolderAndBaseSet(tile.index)
-        end
-      end)
-    popup:close()
-  end
-
-  local function duplicate()
-    local origTile = ts:tile(ti)
-    app.transaction("Duplicate Attachment",
-      function()
-        local tile
-        forEachCategoryTileset(
-          function(ts)
-            tile = spr:newTile(ts)
-            tile.image:clear()
-            tile.image:drawImage(ts:tile(ti).image)
-            tile.properties(PK).anchors = ts:tile(ti).properties(PK).anchors
-        end)
-        local refTileset = get_base_tileset(activeTilemap)
-        refTileset:tile(#refTileset-1).properties(PK).ref = refTileset:tile(ti).properties(PK).ref
-        if tile then
-          addInFolderAndBaseSet(tile.index)
-        end
-      end)
-    popup:close()
-  end
-
-  local function delete(repeatedTiOnBaseFolder)
-    app.transaction(
-      function()
-        if db.isBaseSetFolder(folder) and
-           not repeatedTiOnBaseFolder and is_unused_tile(ti) then
-          forEachCategoryTileset(
-            function(ts)
-              spr:deleteTile(ts, ti)
-            end)
-
-          -- Remap tiles in all tilemaps
-          remap_tiles_in_tilemap_layer_delete_index(activeTilemap, ti)
-
-          remove_tiles_from_folders(folders, ti)
-        else
-          remove_tile_from_folder_by_index(folder, indexInFolder)
-        end
-        activeTilemap.properties(PK).folders = folders
-      end)
-    popup:close()
-  end
-
-  -- Select all the active layers' frames where the selected attachment is used.
-  local function selectFrames()
-    local frames = {}
-    for _,cel in ipairs(activeTilemap.cels) do
-      if cel.image then
-        local celTi = cel.image:getPixel(0, 0)
-        if celTi == ti then
-          table.insert(frames, cel.frameNumber)
-        end
-      end
-    end
-    app.range.frames = frames
+  local oldFocusedItem = focusedItem
+  if folder then
+    focusedItem = { folder=folder.name, index=indexInFolder, tile=ti }
+  else
+    focusedItem = nil
   end
 
   popup:menuItem{ text="Align Anchors", onclick=commands.AlignAnchors }
   popup:separator()
-  popup:menuItem{ text="&New Empty", onclick=newEmpty }
-  popup:menuItem{ text="Dupli&cate", onclick=duplicate }
+  popup:menuItem{ text="&New Empty", onclick=commands.NewEmptyAttachment }
+  popup:menuItem{ text="Dupli&cate", onclick=commands.DuplicateAttachment }
   popup:separator()
-  popup:menuItem{ text="Highlight &Usage", onclick=selectFrames }
-  popup:menuItem{ text="Find &Next Usage", onclick=function() find_next_attachment_usage(ti, MODE_FORWARD) end }
-  popup:menuItem{ text="Find &Prev Usage", onclick=function() find_next_attachment_usage(ti, MODE_BACKWARDS) end }
+  popup:menuItem{ text="Highlight &Usage", onclick=commands.HighlightUsage }
+  popup:menuItem{ text="Find &Next Usage", onclick=commands.FindNext }
+  popup:menuItem{ text="Find &Prev Usage", onclick=commands.FindPrev }
   local repeatedTiOnBaseFolder = false
   if folder and db.isBaseSetFolder(folder) then
     repeatedTiOnBaseFolder = (count_folder_items_with_tile(folder, ti) > 1)
@@ -744,10 +799,12 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
                  repeatedTiOnBaseFolder or
                  is_unused_tile(ti)) then
     popup:separator()
-    popup:menuItem{ text="&Delete", onclick=function() delete(repeatedTiOnBaseFolder) end }
+    popup:menuItem{ text="&Delete", onclick=commands.DeleteAttachment }
   end
   popup:showMenu()
-  imi.repaint = true
+
+  focusedItem = oldFocusedItem
+  imi.dlg:repaint()
 end
 
 local function show_tile_info(ti)
@@ -1518,15 +1575,7 @@ function main.moveFocusedItem(delta)
   end
   assert(focusedItem)
 
-  local folders = activeTilemap.properties(PK).folders
-  local folder
-  for i=1,#folders do
-    if folders[i].name == focusedItem.folder then
-      folder = folders[i]
-      break
-    end
-  end
-
+  local folders, folder = get_active_folder()
   if folder then
     local positionBounds = get_folder_position_bounds(folder)
     local position = Point(focusedItem.position)

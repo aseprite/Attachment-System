@@ -29,6 +29,10 @@ function commands.FindPrev()
   main.findPrevAttachmentUsage()
 end
 
+function commands.HighlightUsage()
+  main.highlightUsage()
+end
+
 function commands.InsertJoint()
   local initialPoint = main.startSelectingJoint()
   app.editor:askPoint{
@@ -48,6 +52,18 @@ end
 
 function commands.AlignAnchors()
   main.alignAnchors()
+end
+
+function commands.NewEmptyAttachment()
+  main.newEmptyAttachment()
+end
+
+function commands.DuplicateAttachment()
+  main.duplicateAttachment()
+end
+
+function commands.DeleteAttachment()
+  main.deleteAttachment()
 end
 
 function commands.FocusPrevAttachment()
@@ -119,6 +135,10 @@ function commands.registerCommands(plugin)
     { newSeparator=true },
     { newCommand="InsertJoint", title="Insert Joint" },
     { newCommand="AlignAnchors", title="Align Anchors" },
+    { newSeparator=true },
+    { newCommand="NewEmptyAttachment", title="New Empty Attachment" },
+    { newCommand="DuplicateAttachment", title="Duplicate Attachment" },
+    { newCommand="DeleteAttachment", title="Delete Attachment" },
     { newSeparator=true },
     { newCommand="NewFolder", title="New Attachments Folder" },
     { newSeparator=true },

@@ -93,25 +93,25 @@ end
 function commands.ShowTilesID()
   if not main.hasDialog() then return end
   pref.showTilesID = not pref.showTilesID
-  imi.repaint = true
+  imi.repaint()
 end
 
 function commands.ShowUsage()
   if not main.hasDialog() then return end
   pref.showTilesUsage = not pref.showTilesUsage
-  imi.repaint = true
+  imi.repaint()
 end
 
 function commands.ShowUnusedTilesSemitransparent()
   if not main.hasDialog() then return end
   pref.showUnusedTilesSemitransparent = not pref.showUnusedTilesSemitransparent
-  imi.repaint = true
+  imi.repaint()
 end
 
 function commands.ResetZoom()
   if not main.hasDialog() then return end
   pref.setZoom(1.0)
-  imi.repaint = true
+  imi.repaint()
 end
 
 -- All registered commands will be called AttachmentSystem_CommandName

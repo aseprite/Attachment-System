@@ -505,8 +505,7 @@ local function set_active_tile(ti)
     end
 
     main.alignAnchors()
-
-    imi.repaint = true
+    imi.repaint()
     app.refresh()
   end
 end
@@ -689,7 +688,7 @@ function main.newEmptyAttachment()
       add_in_folder_and_base_set(folders, folder, tile.index)
     end
   end)
-  imi.dlg:repaint()
+  imi.repaint()
 end
 
 function main.duplicateAttachment()
@@ -717,7 +716,7 @@ function main.duplicateAttachment()
       add_in_folder_and_base_set(folders, folder, tile.index)
     end
   end)
-  imi.dlg:repaint()
+  imi.repaint()
 end
 
 function main.deleteAttachment()
@@ -752,7 +751,7 @@ function main.deleteAttachment()
       end
       activeTilemap.properties(PK).folders = folders
     end)
-    imi.dlg:repaint()
+    imi.repaint()
   end
 end
 
@@ -803,7 +802,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   popup:showMenu()
 
   focusedItem = oldFocusedItem
-  imi.dlg:repaint()
+  imi.repaint()
 end
 
 local function show_tile_info(ti)
@@ -1009,7 +1008,7 @@ local function show_categories_selector(categories, activeTileset)
                   onclick=function()
                     popup:close()
                     new_or_rename_category_dialog()
-                    imi.repaint = true
+                    imi.repaint()
                   end }
   popup:menuItem{ text="Rename Category", onclick=rename }
   if #categories > 1 then
@@ -1058,7 +1057,7 @@ local function show_folder_context_menu(folders, folder)
     app.transaction("Sort Folder", function()
       activeTilemap.properties(PK).folders = folders
     end)
-    imi.dlg:repaint()
+    imi.repaint()
   end
 
   local function rename()
@@ -1108,7 +1107,7 @@ local function show_options(rc)
   popup:separator()
   popup:menuItem{ text="Reset Zoom", onclick=commands.ResetZoom }
   popup:showMenu()
-  imi.repaint = true
+  imi.repaint()
 end
 
 local function get_possible_attachments(point)
@@ -1161,7 +1160,7 @@ function main.newFolder()
       activeTilemap.properties(PK).folders = folders
     end)
   end
-  imi.dlg:repaint()
+  imi.repaint()
 end
 
 local function imi_ongui()
@@ -1185,7 +1184,7 @@ local function imi_ongui()
           db.setupSprite(spr)
           set_active_tile(1)
         end)
-      imi.dlg:repaint()
+      imi.repaint()
     end
   end
 
@@ -1199,7 +1198,7 @@ local function imi_ongui()
       if spr then
         app.transaction("Setup Attachment System",
                         function() db.setupSprite(spr) end)
-        imi.dlg:repaint()
+        imi.repaint()
       end
     end
 
@@ -1216,7 +1215,7 @@ local function imi_ongui()
     if imi.button(label) then
       app.transaction("Setup Attachment System",
                       function() db.setupSprite(spr) end)
-      imi.repaint = true
+      imi.repaint()
     end
 
   -- Show options to create a joint between two layers in the current frame
@@ -1435,7 +1434,7 @@ local function imi_ongui()
             app.transaction("Resize Folder", function()
               folder.viewport = Size(size.width, size.height)
               activeTilemap.properties(PK).folders = folders
-              imi.dlg:repaint()
+              imi.repaint()
             end)
           end
 
@@ -1445,7 +1444,7 @@ local function imi_ongui()
               handle_drop_item_in_folder(folders,
                                          data.folder, data.index, data.ti,
                                          folder, imi.highlightDropItemPos)
-              imi.repaint = true
+              imi.repaint()
             end
             imi.endDrop()
           end
@@ -1471,7 +1470,7 @@ local function imi_ongui()
                 handle_drop_item_in_folder(folders,
                                            data.folder, data.index, data.ti,
                                            folder, imi.highlightDropItemPos)
-                imi.repaint = true
+                imi.repaint()
                 forceBreak = true -- because the folder.items was modified
               end
               imi.endDrop()
@@ -1527,7 +1526,7 @@ local function Sprite_change(ev)
   end
 
   if repaint then
-    imi.dlg:repaint()
+    imi.repaint()
   end
 end
 
@@ -1615,7 +1614,7 @@ function main.moveFocusedItem(delta)
         end
 
         focusFolderItem = { folder=folder.name, index=newItem }
-        dlg:repaint()
+        imi.repaint()
         break
       end
     end
@@ -1647,11 +1646,11 @@ local function canvas_onkeydown(ev)
   elseif ev.code == "Enter" or ev.code == "NumpadEnter" then
     main.selectFocusedAttachment()
     ev.stopPropagation()
-    dlg:repaint()
+    imi.repaint()
   elseif ev.code == "Escape" then
     imi.focusedWidget.focused = false
     imi.focusedWidget = nil
-    dlg:repaint()
+    imi.repaint()
   end
 
   if delta then
@@ -1664,7 +1663,7 @@ end
 local function canvas_onmousedown(ev)
   if ev.ctrlKey and ev.button == MouseButton.MIDDLE then
     pref.setZoom(1.0)
-    dlg:repaint()
+    imi.repaint()
     return
   end
   return imi.onmousedown(ev)
@@ -1677,7 +1676,7 @@ local function canvas_onwheel(ev)
     else
       pref.setZoom(pref.zoom - ev.deltaY/32.0)
     end
-    dlg:repaint()
+    imi.repaint()
   else
     for i=#imi.mouseWidgets,1,-1 do
       local widget = imi.mouseWidgets[i]
@@ -1695,7 +1694,7 @@ local function canvas_onwheel(ev)
         end
         widget.setScrollPos(Point(widget.scrollPos.x + dx,
                                   widget.scrollPos.y + dy))
-        dlg:repaint()
+        imi.repaint()
         break
       end
     end
@@ -1704,7 +1703,7 @@ end
 
 local function canvas_ontouchmagnify(ev)
   pref.setZoom(pref.zoom + pref.zoom*ev.magnification)
-  dlg:repaint()
+  imi.repaint()
 end
 
 local function unobserve_sprite()
@@ -1765,7 +1764,7 @@ local function App_sitechange(ev)
   main.cancelJoint()
 
   if not imi.isongui and not ev.fromUndo then
-    dlg:repaint() -- TODO repaint only when it's needed
+    imi.repaint() -- TODO repaint only when it's needed
   end
 end
 
@@ -1820,20 +1819,14 @@ function main.startSelectingJoint()
 
   windowState = WindowState.SELECT_JOINT_POINT
   possibleJoint = point
-  if dlg then
-    imi.repaint = true
-    dlg:repaint()
-  end
+  imi.repaint()
 
   return point
 end
 
 function main.setPossibleJoint(point)
   possibleJoint = Point(point)
-  if dlg then
-    imi.repaint = true
-    dlg:repaint()
-  end
+  imi.repaint()
 end
 
 function main.cancelJoint()
@@ -1842,10 +1835,7 @@ function main.cancelJoint()
   end
   windowState = WindowState.NORMAL
   possibleJoint = nil
-  if dlg then
-    imi.repaint = true
-    dlg:repaint()
-  end
+  imi.repaint()
 end
 
 function main.hasDialog()

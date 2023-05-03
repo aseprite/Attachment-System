@@ -95,7 +95,7 @@ local function initVars(ctx)
   imi.beforePaint = {}
   imi.afterPaint = {}
   imi.lastBounds = nil
-  imi.repaint = false
+  imi.repaintFlag = false
   imi.margin = 4*imi.uiScale
 
   -- List of widget IDs inside mousePos, useful to send mouse events
@@ -211,6 +211,10 @@ local function advanceCursor(size, func)
 end
 
 local function addDrawListFunction(callback)
+  -- Don't keep growing drawList, because it will be discarded anyway
+  if imi.repaintFlag then
+    return
+  end
   table.insert(imi.drawList,
     { type="callback",
       callback=callback })
@@ -426,6 +430,17 @@ local function adjustMouseWidgetsDependingOnViewports()
   return mouseWidgets
 end
 
+-- Call Dialog:repaint() in case that we have to repaint and are
+-- outside ongui() loop.
+function processRepaintFlag()
+  if imi.dlg and
+     imi.repaintFlag and
+     not imi.isongui then -- If we are ongui() the repaint will be
+                          -- processed in the loop
+    imi.dlg:repaint()
+  end
+end
+
 ----------------------------------------------------------------------
 -- Public API
 ----------------------------------------------------------------------
@@ -452,12 +467,26 @@ function imi.focusWidget(widget)
   end
 end
 
+function imi.repaint()
+  if imi.isongui then
+    imi.repaintFlag = true
+  elseif imi.dlg then
+    imi.dlg:repaint()
+  end
+end
+
 function imi.onpaint(ev)
   local ctx = ev.context
 
-  imi.repaint = true
-  while imi.repaint do
-    initVars(ctx) -- set imi.repaint=false
+  imi.repaintFlag = true
+  while imi.repaintFlag do
+    initVars(ctx) -- set imi.repaintFlag=false
+
+    -- This shouldn't happen, but just in case.
+    if #imi.drawList > 0 then
+      print(string.format("unexpected non empty draw list (%d)", #imi.drawList))
+      imi.drawList = {}
+    end
 
     if imi.ongui then
       local hadTargetWidget = (imi.targetWidget ~= nil)
@@ -489,7 +518,7 @@ function imi.onpaint(ev)
       imi.dlg:modify{ id=imi.canvasId, mouseCursor=imi.mouseCursor }
     end
 
-    if imi.repaint then
+    if imi.repaintFlag then
       -- Discard the whole drawList as we're going to repaint
       imi.drawList = {}
     else
@@ -508,7 +537,7 @@ function imi.onpaint(ev)
         end
       end
       imi.drawList = {}
-      if not imi.repaint then
+      if not imi.repaintFlag then
         for _,f in ipairs(imi.afterPaint) do
           f()
         end
@@ -523,7 +552,6 @@ function imi.onmousemove(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = ev.button
   imi.mouseCursor = MouseCursor.ARROW
-  imi.repaint = false
 
   for id,widget in pairs(imi.widgets) do
     if widget.bounds then
@@ -531,24 +559,22 @@ function imi.onmousemove(ev)
         widget.onmousemove(widget)
       end
       if widget.dragging then
-        imi.repaint = true
+        imi.repaintFlag = true
         imi.draggingWidget = widget
         imi.highlightDropItemPos = nil
       end
       if pointInsideWidgetHierarchy(widget, imi.mousePos) then
         if not widget.hover then
           widget.hover = true
-          imi.repaint = true
+          imi.repaintFlag = true
         end
       elseif widget.hover then
         widget.hover = false
-        imi.repaint = true
+        imi.repaintFlag = true
       end
     end
   end
-  if imi.repaint then
-    imi.dlg:repaint()
-  end
+  processRepaintFlag()
 
   imi.dlg:modify{ id=imi.canvasId, mouseCursor=imi.mouseCursor }
 end
@@ -556,7 +582,6 @@ end
 function imi.onmousedown(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = ev.button
-  imi.repaint = false
 
   local mouseWidgets = adjustMouseWidgetsDependingOnViewports()
   for i=#mouseWidgets,1,-1 do
@@ -573,7 +598,7 @@ function imi.onmousedown(ev)
 
         widget.pressed = true
         imi.capturedWidget = widget
-        imi.repaint = true
+        imi.repaintFlag = true
       end
     end
     if imi.capturedWidget == widget then
@@ -581,15 +606,12 @@ function imi.onmousedown(ev)
     end
   end
 
-  if imi.repaint then
-    imi.dlg:repaint()
-  end
+  processRepaintFlag()
 end
 
 function imi.onmouseup(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = 0
-  imi.repaint = false
 
   if imi.capturedWidget then
     local widget = imi.capturedWidget
@@ -604,14 +626,12 @@ function imi.onmouseup(ev)
       end
       widget.pressed = false
       widget.checked = not widget.checked
-      imi.repaint = true
+      imi.repaintFlag = true
     end
     imi.capturedWidget = nil
   end
 
-  if imi.repaint then
-    imi.dlg:repaint()
-  end
+  processRepaintFlag()
 
   imi.dlg:modify{ id=imi.canvasId, mouseCursor=imi.mouseCursor }
 end
@@ -619,7 +639,6 @@ end
 function imi.ondblclick(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = ev.button
-  imi.repaint = false
 
   local mouseWidgets = adjustMouseWidgetsDependingOnViewports()
   for i=#imi.mouseWidgets,1,-1 do
@@ -628,6 +647,8 @@ function imi.ondblclick(ev)
       widget.ondblclick(widget)
     end
   end
+
+  processRepaintFlag()
 end
 
 function imi.pushID(id)
@@ -954,7 +975,7 @@ function imi.beginViewport(size, itemSize)
 
     if widget.scrollPos ~= pos then
       widget.scrollPos = pos
-      imi.dlg:repaint()
+      imi.repaint()
     end
   end
 
@@ -971,7 +992,7 @@ function imi.beginViewport(size, itemSize)
       widget.resizedViewport.height = math.max(widget.resizedViewport.height, 1)
 
       if oldResizedViewport ~= widget.resizedViewport then
-        imi.dlg:repaint()
+        imi.repaint()
       end
       imi.mouseCursor = MouseCursor.SE_RESIZE
     elseif widget.draggingHBar then
@@ -1018,7 +1039,7 @@ function imi.beginViewport(size, itemSize)
 
       if oldHoverHBar ~= widget.hoverHBar or
          oldHoverVBar ~= widget.hoverVBar then
-        imi.dlg:repaint()
+        imi.repaint()
       end
 
       local oldHoverResize = widget.hoverResize
@@ -1030,7 +1051,7 @@ function imi.beginViewport(size, itemSize)
         imi.mouseCursor = MouseCursor.SE_RESIZE
       end
       if oldHoverResize ~= widget.hoverResize then
-        imi.dlg:repaint()
+        imi.repaint()
       end
     end
   end
@@ -1076,7 +1097,7 @@ function imi.beginViewport(size, itemSize)
     elseif widget.draggingVBar then
       widget.draggingVBar = false
     end
-    imi.dlg:repaint()
+    imi.repaint()
   end
 
   advanceCursor(

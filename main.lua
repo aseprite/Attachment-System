@@ -1346,7 +1346,7 @@ local function imi_ongui()
             local child = find_layer_by_id(spr.layers, layerId)
             if child then
               imi.pushID(layerId)
-              if imi.button("+" .. child.name) then
+              if imi.button("> " .. child.name) then
                 local origin = cel.position
                 app.editor:askPoint{
                   title="Change Anchor Point for Layer " .. child.name,

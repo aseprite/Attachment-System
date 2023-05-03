@@ -25,7 +25,6 @@ local focusFolderItem = nil
 
 -- Constants
 local PK = db.PK
-local kUnnamedCategory = "(Unnamed)"
 local WindowState = {
   NORMAL = 1,
   SELECT_JOINT_POINT = 2,
@@ -990,8 +989,10 @@ local function show_categories_selector(categories, activeTileset)
       if catTileset == nil then assert(false) end
 
       local checked = (categoryID == activeTileset.properties(PK).id)
+
       local name = catTileset.name
-      if name == "" then name = kUnnamedCategory end
+      if name == "" then name = activeTilemap.name end
+
       popup:menuItem{ text=name, focus=checked,
                       onclick=function()
                         popup:close()
@@ -1268,8 +1269,10 @@ local function imi_ongui()
       -- Active Category / Categories
       imi.sameLine = true
       local activeTileset = activeTilemap.tileset
+
       local name = activeTileset.name
-      if name == "" then name = kUnnamedCategory end
+      if name == "" then name = activeTilemap.name end
+
       if imi.button(name) then
         -- Show popup to select other category
         imi.afterGui(

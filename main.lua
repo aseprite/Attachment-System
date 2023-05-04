@@ -276,8 +276,12 @@ local function set_ref_point(ts, ti, point)
 end
 
 -- Matches defined reference points <-> anchor points from parent to
--- children
-function main.alignAnchors()
+-- children in the active frame (app.frame).
+--
+-- * fromThisLayer: Can be nil to align all attachments/layers or can
+--   be a specific layer to align its children (not the layer itself)
+--
+function main.alignAnchors(fromThisLayerId)
   local spr = app.activeSprite
   if not spr then return end
 
@@ -350,6 +354,12 @@ function main.alignAnchors()
         end
       end
     end
+  end
+
+  -- Break hierarchy to avoid aligning more parents that weren't
+  -- requested to be aligned
+  if fromThisLayerId and hierarchy[fromThisLayerId] then
+    hierarchy[fromThisLayerId] = nil
   end
 
   app.transaction("Align Anchors", function()
@@ -504,7 +514,9 @@ local function set_active_tile(ti)
       cel.position = cel.position + oldRefPoint - newRefPoint
     end
 
-    main.alignAnchors()
+    -- Align children of the new attachment layer only
+    main.alignAnchors(activeTilemap.properties(PK).id)
+
     imi.repaint()
     app.refresh()
   end

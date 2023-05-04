@@ -154,32 +154,6 @@ local function find_layer_by_name(layers, name)
   return nil
 end
 
-local function find_anchor_on_layer(parentLayer, childLayer, parentTile)
-  if parentLayer.isTilemap and childLayer.isTilemap then
-    local anchors = parentLayer.tileset:tile(parentTile).properties(PK).anchors
-    if anchors and #anchors >= 1 then
-      for i=1, #anchors, 1 do
-        if anchors[i].layerId == childLayer.properties(PK).id then
-          return anchors[i]
-        end
-      end
-    end
-  end
-  return nil
-end
-
-local function find_parent_layer(layers, childLayer)
-  for _,layer in ipairs(layers) do
-    if layer.isGroup then
-      local result = find_parent_layer(layer.layers, childLayer)
-      if result then return result end
-    elseif find_anchor_on_layer(layer, childLayer, 1) then
-      return layer
-    end
-  end
-  return nil
-end
-
 local function find_tileset_by_name(spr, name)
   for i=1,#spr.tilesets do
     local tileset = spr.tilesets[i]
@@ -209,6 +183,31 @@ local function get_base_tileset(layer)
   return ts
 end
 
+local function find_anchor_on_layer(parentLayer, childLayer, parentTile)
+  if parentLayer.isTilemap and childLayer.isTilemap then
+    local anchors = get_base_tileset(parentLayer):tile(parentTile).properties(PK).anchors
+    if anchors and #anchors >= 1 then
+      for i=1, #anchors, 1 do
+        if anchors[i].layerId == childLayer.properties(PK).id then
+          return anchors[i]
+        end
+      end
+    end
+  end
+  return nil
+end
+
+local function find_parent_layer(layers, childLayer)
+  for _,layer in ipairs(layers) do
+    if layer.isGroup then
+      local result = find_parent_layer(layer.layers, childLayer)
+      if result then return result end
+    elseif find_anchor_on_layer(layer, childLayer, 1) then
+      return layer
+    end
+  end
+  return nil
+end
 
 local function get_folder_item_index_by_position(folder, position)
   for i=1,#folder.items do
@@ -252,6 +251,18 @@ local function get_anchor_point_for_layer(ts, ti, layerId)
     end
   end
   return nil
+end
+
+local function clear_anchor_point(ts, ti, layerId)
+  local anchors = ts:tile(ti).properties(PK).anchors
+  if not anchors then anchors = {} end
+  for i=1,#anchors do
+    if anchors[i].layerId == layerId then
+      table.remove(anchors, i)
+      ts:tile(ti).properties(PK).anchors = anchors
+      return
+    end
+  end
 end
 
 local function set_anchor_point(ts, ti, layerId, point)
@@ -770,6 +781,94 @@ function main.highlightUsage()
     end
   end
   app.range.frames = frames
+end
+
+local function unlinkAnchor(anchorLayerId)
+  if not app.layer or
+     not app.cel or not app.cel.image or
+     not find_layer_by_id(app.layer.sprite.layers, anchorLayerId) then
+    return
+  end
+  -- Get the tile from the base tileset to get ref/anchor points
+  local layerA = app.layer
+  local layerB = find_layer_by_id(layerA.sprite.layers, anchorLayerId)
+  if not layerB.tileset or not layerB:cel(app.frame) or
+     not layerB:cel(app.frame).image then
+    return
+  end
+
+  local celA = layerA:cel(app.frame)
+  local celB = layerB:cel(app.frame)
+  local tiA = celA.image:getPixel(0, 0)
+  local tiB = celB.image:getPixel(0, 0)
+  local idB = layerB.properties(PK).id
+  local tsA = get_base_tileset(layerA)
+  local tsB = get_base_tileset(layerB)
+  local anchorOnA = find_anchor_on_layer(layerA, layerB, tiA)
+  local refOnB = tsB:tile(tiB).properties(PK).ref
+
+  clear_anchor_point(tsA, tiA, idB)
+  if anchorOnA and refOnB and
+     celA.position + anchorOnA.position == celB.position + refOnB then
+    tsB:tile(tiB).properties(PK).ref = nil
+  end
+  dlg:repaint()
+end
+
+local function swapHierarchy(anchorLayerId)
+  if not app.layer or
+     not app.cel or not app.cel.image or
+     not find_layer_by_id(app.layer.sprite.layers, anchorLayerId) then
+    return
+  end
+  local layerA = app.layer
+  local layerB = find_layer_by_id(layerA.sprite.layers, anchorLayerId)
+  if not layerB.tileset or not layerB:cel(app.frame) or
+     not layerB:cel(app.frame).image then
+    return
+  end
+
+  local celA = layerA:cel(app.frame)
+  local celB = layerB:cel(app.frame)
+  local tiA = celA.image:getPixel(0, 0)
+  local tiB = celB.image:getPixel(0, 0)
+  local idA = layerA.properties(PK).id
+  local idB = layerB.properties(PK).id
+  local tsA = get_base_tileset(layerA)
+  local tsB = get_base_tileset(layerB)
+  local anchorOnA = find_anchor_on_layer(layerA, layerB, tiA)
+  local refOnA = tsA:tile(tiA).properties(PK).ref
+  local refOnB = tsB:tile(tiB).properties(PK).ref
+
+  if celA.position + anchorOnA.position == celB.position + refOnB then
+    tsB:tile(tiB).properties(PK).ref = nil
+  end
+  clear_anchor_point(tsA, tiA, idB)
+  if not refOnA then
+    set_ref_point(tsA, tiA, anchorOnA.position)
+  end
+  if refOnB then
+    local pos = celA.position + anchorOnA.position - celB.position
+    set_anchor_point(tsB, tiB, idA, pos)
+  else
+    set_anchor_point(tsB, tiB, idA, refOnB)
+  end
+  dlg:repaint()
+end
+
+local function show_hierarchy_menu(anchorLayerId)
+  local popup = Dialog{ parent=imi.dlg }
+
+  popup:menuItem{ text="Swap hierarchy",
+                  onclick=function()
+                            swapHierarchy(anchorLayerId)
+                          end }
+  popup:menuItem{ text="Unlink",
+                  onclick=function()
+                            unlinkAnchor(anchorLayerId)
+                          end }
+  popup:showMenu()
+  imi.dlg:repaint()
 end
 
 local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
@@ -1358,6 +1457,11 @@ local function imi_ongui()
                     end)
                   end
                 }
+              end
+              imi.widget.onmousedown = function(widget)
+                if imi.mouseButton == MouseButton.RIGHT then
+                  show_hierarchy_menu(layerId)
+                end
               end
               imi.popID(layerId)
             end

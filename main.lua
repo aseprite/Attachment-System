@@ -1233,7 +1233,7 @@ local function imi_ongui()
         for i = 1,#attachments-1 do
           local a = attachments[i]
           local b = attachments[i+1]
-          local label = a.name .. " <-> " .. b.name
+          local label = a.name .. " > " .. b.name
           imi.pushID(i .. label)
           if imi.button(label) then
             insert_joint(a, b, pt)

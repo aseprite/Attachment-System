@@ -506,7 +506,8 @@ local function get_active_folder()
 end
 
 local function set_active_tile(ti)
-  if activeTilemap then
+  if not activeTilemap then return end
+  app.transaction("Put Attachment", function()
     local ts = get_base_tileset(activeTilemap)
     local cel = activeTilemap:cel(app.activeFrame)
     local oldRefPoint
@@ -547,7 +548,7 @@ local function set_active_tile(ti)
 
     imi.repaint()
     app.refresh()
-  end
+  end)
 end
 
 -- Activates the next cel in the active layer where the given

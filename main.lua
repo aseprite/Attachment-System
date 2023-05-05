@@ -33,6 +33,7 @@ local WindowState = {
 -- Main window state
 local windowState = WindowState.NORMAL
 local possibleJoint = nil
+local activeAskPoint = nil -- Just to detect if we press the same button again
 
 local function contains(t, item)
   for _,v in pairs(t) do
@@ -1466,16 +1467,22 @@ local function imi_ongui()
         imi.sameLine = false
         if tile.properties(PK).ref then
           if imi.button("RefPoint") then
-            local origin = cel.position
-            app.editor:askPoint{
-              title="Change Ref Point",
-              point=tile.properties(PK).ref + origin,
-              onclick=function(ev)
-                app.transaction("Change Ref Point", function()
-                  tile.properties(PK).ref = ev.point - origin
-                end)
-              end
-            }
+            if activeAskPoint and activeAskPoint.ref then
+              app.editor:cancel()
+              activeAskPoint = nil
+            else
+              activeAskPoint = { ref=true }
+              local origin = cel.position
+              app.editor:askPoint{
+                title="Change Ref Point",
+                point=tile.properties(PK).ref + origin,
+                onclick=function(ev)
+                  app.transaction("Change Ref Point", function()
+                    tile.properties(PK).ref = ev.point - origin
+                  end)
+                end
+              }
+            end
           end
         end
         if tile.properties(PK).anchors then
@@ -1486,17 +1493,23 @@ local function imi_ongui()
             if child then
               imi.pushID(layerId)
               if imi.button("> " .. child.name) then
-                local origin = cel.position
-                app.editor:askPoint{
-                  title="Change Anchor Point for Layer " .. child.name,
-                  point=anchors[i].position + origin,
-                  onclick=function(ev)
-                    app.transaction("Change Anchor Point", function()
-                      anchors[i].position = ev.point - origin
-                      tile.properties(PK).anchors = anchors
-                    end)
-                  end
-                }
+                if activeAskPoint and activeAskPoint.anchor == layerId then
+                  app.editor:cancel()
+                  activeAskPoint = nil
+                else
+                  activeAskPoint = { anchor=layerId }
+                  local origin = cel.position
+                  app.editor:askPoint{
+                    title="Change Anchor Point for Layer " .. child.name,
+                    point=anchors[i].position + origin,
+                    onclick=function(ev)
+                      app.transaction("Change Anchor Point", function()
+                        anchors[i].position = ev.point - origin
+                        tile.properties(PK).anchors = anchors
+                      end)
+                    end
+                  }
+                end
               end
               imi.widget.onmousedown = function(widget)
                 if imi.mouseButton == MouseButton.RIGHT then
@@ -1980,6 +1993,7 @@ function main.cancelJoint()
   end
   windowState = WindowState.NORMAL
   possibleJoint = nil
+  activeAskPoint = nil
   imi.repaint()
 end
 

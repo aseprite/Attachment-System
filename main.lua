@@ -22,6 +22,7 @@ local tilesHistogram = {} -- How many times each tile is used in the active laye
 local activeTileImageInfo = {} -- Used to re-calculate info when the tile image changes
 local focusedItem = nil        -- Folder + item with the keyboard focus
 local focusFolderItem = nil
+local folderWidgets = {}  -- Visible widgets (viewports) representing folders
 
 -- Constants
 local PK = db.PK
@@ -1688,6 +1689,7 @@ local function imi_ongui()
       -- that has the keyboard focus (imi.focusedWidget)
       focusedItem = nil
 
+      folderWidgets.clear()
       local forceBreak = false
       for i,folder in ipairs(folders) do
         imi.pushID(i .. folder.name)
@@ -1710,6 +1712,7 @@ local function imi_ongui()
           imi.beginViewport(Size(imi.viewport.width,
                                  outSize.height),
                             outSize)
+          folderWidgets.add(imi.widget, folder)
 
           -- If we are not resizing the viewport, we restore the
           -- viewport size stored in the folder
@@ -1864,15 +1867,43 @@ function main.moveFocusedItem(delta)
   end
   assert(focusedItem)
 
-  local folders, folder = get_active_folder()
+  local _, folder = get_active_folder()
   if folder then
+    local focusedFolderWidget = folderWidgets.find(folder)
     local positionBounds = get_folder_position_bounds(folder)
     local position = Point(focusedItem.position)
 
+    local newFolderWidget = nil
+    local newItem
     -- Navigate to the next item
     while positionBounds:contains(position) do
       position = position + delta
-      local newItem = get_folder_item_index_by_position(folder, position)
+
+      -- Determine if we have to move focus to another folder, and
+      -- which item must be selected.
+      if position.x < 0 then
+        newFolderWidget, newItem = folderWidgets.findClosestFolder(focusedFolderWidget, focusedItem.position, "left")
+      end
+      if position.y < 0 then
+        newFolderWidget, newItem = folderWidgets.findClosestFolder(focusedFolderWidget, focusedItem.position, "up")
+      end
+      if position.x >= positionBounds.width then
+        newFolderWidget, newItem = folderWidgets.findClosestFolder(focusedFolderWidget, focusedItem.position, "right")
+      end
+      if position.y >= positionBounds.height then
+        newFolderWidget, newItem = folderWidgets.findClosestFolder(focusedFolderWidget, focusedItem.position, "down")
+      end
+
+      -- If we are changing the focus to another folder, set it
+      -- as the active one.
+      if newFolderWidget then
+        folder = newFolderWidget.folder
+      else
+        -- Active folder didn't change, just find the new focused
+        -- item in it.
+        newItem = get_folder_item_index_by_position(folder, position)
+      end
+
       if newItem then
         -- Make "position" of new focused item "newItem" visible in
         -- the focused viewport.
@@ -1898,6 +1929,24 @@ function main.moveFocusedItem(delta)
             scrollPos.y = itemPos.y - viewport.viewportSize.height + itemSize.height
           end
           viewport.setScrollPos(scrollPos)
+        end
+
+        -- Make "position" of new focused folder containing "newItem"
+        -- visible in its parent viewport.
+        if newFolderWidget and
+           newFolderWidget.parent and
+           newFolderWidget.parent.scrollPos then
+          local parentViewport = newFolderWidget.parent
+          local scrollPos = Point(parentViewport.scrollPos)
+          local viewportPos = newFolderWidget.bounds.origin
+          local viewportSize = newFolderWidget.bounds.size
+          if viewportPos.y < parentViewport.bounds.origin.y then
+            scrollPos.y = viewportPos.y + scrollPos.y - parentViewport.bounds.origin.y
+          end
+          if viewportPos.y > parentViewport.bounds.origin.y + parentViewport.bounds.size.height - viewportSize.height then
+            scrollPos.y = viewportPos.y + scrollPos.y - (parentViewport.bounds.origin.y + parentViewport.bounds.size.height - viewportSize.height)
+          end
+          parentViewport.setScrollPos(scrollPos)
         end
 
         focusFolderItem = { folder=folder.name, index=newItem }
@@ -2170,6 +2219,91 @@ function main.openDialog()
   App_sitechange({ fromUndo=false })
   app.events:on('sitechange', App_sitechange)
   observe_sprite(app.activeSprite)
+end
+
+function folderWidgets.add(widget, folder)
+  widget.folder = folder
+
+  -- Returns the index of the closest item inside this folderWidget respect to the itemPos inside the folderWidget
+  -- specified as a parameter. Also returns the distance between them.
+  widget.findClosestItemIndex = function (folderWidget, itemPos)
+    local p1 = folderWidget.bounds.origin - folderWidget.scrollPos + Point(itemPos.x * shrunkenSize.width, itemPos.y * shrunkenSize.height)
+    local d = 99999
+    local closestItemIndex = 0
+    for i, item in ipairs(widget.folder.items) do
+      local p2 = widget.bounds.origin - widget.scrollPos + Point(item.position.x * shrunkenSize.width, item.position.y * shrunkenSize.height)
+      -- Distance vector.
+      local dv = p1 - p2
+      -- Calculate Manhattan distance, since it is easier than euclidean and for our purposes it is the same.
+      local newd = math.abs(dv.x) + math.abs(dv.y)
+      if newd < d then
+        d = newd
+        closestItemIndex = i
+      end
+    end
+    return closestItemIndex, d
+  end
+
+  table.insert(folderWidgets, widget)
+end
+
+function folderWidgets.clear()
+  for i=1, #folderWidgets do
+    folderWidgets[i] = nil
+  end
+end
+
+-- Returns the "folder widget" (viewport) representing the specified folder. Or
+-- nil if there is no widget for the folder.
+function folderWidgets.find(folder)
+  for _,widget in ipairs(folderWidgets) do
+    if widget.folder.name == folder.name then
+      return widget
+    end
+  end
+  return nil
+end
+
+function folderWidgets.findClosestFolder(folderWidget, itemPosition, side)
+  local folderOnSide = {
+    up = function(f)
+      return folderWidget.bounds.origin.y > f.bounds.origin.y
+    end,
+    left = function(f)
+      return folderWidget.bounds.origin.x > f.bounds.origin.x and folderWidget.bounds.origin.y == f.bounds.origin.y
+    end,
+    down = function(f)
+      return folderWidget.bounds.origin.y < f.bounds.origin.y
+    end,
+    right = function(f)
+      return folderWidget.bounds.origin.x < f.bounds.origin.x and folderWidget.bounds.origin.y == f.bounds.origin.y
+    end
+  }
+
+  local d = 99999
+  local closestFolderWidget = nil
+  local closestItemIndex
+  for i=1,#folderWidgets do
+    -- Skip folder if it is the folder passed as a parameter
+    if folderWidgets[i] == folderWidget then
+      goto continue
+    end
+
+    if folderOnSide[side](folderWidgets[i]) then
+      local cii, newd = folderWidgets[i].findClosestItemIndex(folderWidget, itemPosition)
+      if cii and newd < d then
+        d = newd
+        closestFolderWidget = folderWidgets[i]
+        closestItemIndex = cii
+      end
+    end
+
+    ::continue::
+  end
+
+  if closestFolderWidget then
+    return closestFolderWidget, closestItemIndex
+  end
 end
 
 return main

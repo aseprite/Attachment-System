@@ -286,6 +286,35 @@ local function set_ref_point(ts, ti, point)
   ts:tile(ti).properties(PK).ref = point
 end
 
+local function create_layers_hierarchy(layers, hierarchy)
+  for i=1,#layers do
+    local layer = layers[i]
+    if layer.isTilemap then
+      local layerProperties = layer.properties(PK)
+      if layerProperties.id then
+        local ts = get_base_tileset(layer)
+        for ti=1,#ts-1 do
+          local anchors = ts:tile(ti).properties(PK).anchors
+          if anchors then
+            for j=1,#anchors do
+              local auxLayer = find_layer_by_id(layers, anchors[j].layerId)
+              if auxLayer then
+                local childId = anchors[j].layerId
+                if childId then
+                  hierarchy[childId] = layerProperties.id
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+    if layer.isGroup then
+      create_layers_hierarchy(layer.layers, hierarchy)
+    end
+  end
+end
+
 -- Matches defined reference points <-> anchor points from parent to
 -- children in the active frame (app.frame).
 --
@@ -297,38 +326,10 @@ function main.alignAnchors(fromThisLayerId)
   if not spr then return end
 
   local hierarchy = {}
-  local function create_layers_hierarchy(layers)
-    for i=1,#layers do
-      local layer = layers[i]
-      if layer.isTilemap then
-        local layerProperties = layer.properties(PK)
-        if layerProperties.id then
-          local ts = get_base_tileset(layer)
-          for ti=1,#ts-1 do
-            local anchors = ts:tile(ti).properties(PK).anchors
-            if anchors then
-              for j=1,#anchors do
-                local auxLayer = find_layer_by_id(spr.layers, anchors[j].layerId)
-                if auxLayer then
-                  local childId = anchors[j].layerId
-                  if childId then
-                    hierarchy[childId] = layerProperties.id
-                  end
-                end
-              end
-            end
-          end
-        end
-      end
-      if layer.isGroup then
-        create_layers_hierarchy(layer.layers)
-      end
-    end
-  end
-  create_layers_hierarchy(spr.layers)
+  create_layers_hierarchy(spr.layers, hierarchy)
 
   local movedLayers = {}
-  local function align_layer(childId, parentId, tab)
+  local function align_layer(childId, parentId, tab, hierarchy_control)
     local child = find_layer_by_id(spr.layers, childId)
     local parent = find_layer_by_id(spr.layers, parentId)
 
@@ -336,7 +337,19 @@ function main.alignAnchors(fromThisLayerId)
     assert(parent)
 
     if hierarchy[parentId] then
-      align_layer(parentId, hierarchy[parentId], tab+1)
+      for i=1,#hierarchy_control do
+        if hierarchy[parentId] == hierarchy_control[i] then
+          app.alert("Hierarchy loop error. Try to fix Parent > Child chain of the next layers: " ..
+                    find_layer_by_id(spr.layers, hierarchy_control[i]).name ..
+                    " & " ..
+                    find_layer_by_id(spr.layers, parentId).name)
+          return false
+        end
+      end
+      table.insert(hierarchy_control, parentId)
+      if not align_layer(parentId, hierarchy[parentId], tab+1, hierarchy_control) then
+        return false
+      end
     end
 
     if not movedLayers[childId] then
@@ -365,6 +378,7 @@ function main.alignAnchors(fromThisLayerId)
         end
       end
     end
+    return true
   end
 
   -- Break hierarchy to avoid aligning more parents that weren't
@@ -375,7 +389,10 @@ function main.alignAnchors(fromThisLayerId)
 
   app.transaction("Align Anchors", function()
     for childId,parentId in pairs(hierarchy) do
-      align_layer(childId, parentId, 0)
+      local hierarchy_control = { childId }
+      if not align_layer(childId, parentId, 0, hierarchy_control) then
+        break
+      end
     end
     app.refresh()
   end)

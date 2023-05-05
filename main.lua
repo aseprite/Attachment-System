@@ -507,6 +507,15 @@ end
 
 local function set_active_tile(ti)
   if not activeTilemap then return end
+
+  -- Go to normal state
+  --
+  -- TODO we could create some special UI in such a way that
+  --      askPoint() allows to change the active attachment, but it
+  --      needs some thought, at the moment if we don't go back to
+  --      normal it's confusing
+  main.cancelJoint()
+
   app.transaction("Put Attachment", function()
     local ts = get_base_tileset(activeTilemap)
     local cel = activeTilemap:cel(app.activeFrame)

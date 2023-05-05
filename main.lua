@@ -1303,19 +1303,17 @@ local function imi_ongui()
 
   function new_layer_button()
     if imi.button("New Layer") then
-      app.transaction(
-        "New Layer",
-        function()
-          -- Create a new tilemap with the grid bounds as the canvas
-          -- bounds and a tileset with one empty tile to start
-          -- painting.
-          app.command.NewLayer{ tilemap=true, gridBounds=spr.bounds }
-          activeTilemap = app.activeLayer
-          folders = db.getLayerProperties(activeTilemap).folders
-          spr:newTile(activeTilemap.tileset)
-          db.setupSprite(spr)
-          set_active_tile(1)
-        end)
+      app.transaction("New Layer", function()
+        -- Create a new tilemap with the grid bounds as the canvas
+        -- bounds and a tileset with one empty tile to start
+        -- painting.
+        app.command.NewLayer{ tilemap=true, gridBounds=spr.bounds }
+        activeTilemap = app.activeLayer
+        folders = db.getLayerProperties(activeTilemap).folders
+        spr:newTile(activeTilemap.tileset)
+        db.setupSprite(spr)
+        set_active_tile(1)
+      end)
       imi.repaint()
     end
   end

@@ -794,7 +794,7 @@ function main.highlightUsage()
   app.range.frames = frames
 end
 
-local function unlinkAnchor(anchorLayerId)
+local function unlink_anchor(anchorLayerId)
   if not app.layer or
      not app.cel or not app.cel.image or
      not find_layer_by_id(app.layer.sprite.layers, anchorLayerId) then
@@ -826,7 +826,7 @@ local function unlinkAnchor(anchorLayerId)
   dlg:repaint()
 end
 
-local function swapHierarchy(anchorLayerId)
+local function swap_hierarchy(anchorLayerId)
   if not app.layer or
      not app.cel or not app.cel.image or
      not find_layer_by_id(app.layer.sprite.layers, anchorLayerId) then
@@ -867,17 +867,21 @@ local function swapHierarchy(anchorLayerId)
   dlg:repaint()
 end
 
-local function show_hierarchy_menu(anchorLayerId)
+local function show_anchor_context_menu(anchorLayerId)
   local popup = Dialog{ parent=imi.dlg }
 
-  popup:menuItem{ text="Swap hierarchy",
-                  onclick=function()
-                            swapHierarchy(anchorLayerId)
-                          end }
   popup:menuItem{ text="Unlink",
                   onclick=function()
-                            unlinkAnchor(anchorLayerId)
-                          end }
+                    app.transaction("Unlink Anchor", function()
+                      unlink_anchor(anchorLayerId)
+                    end)
+                  end}
+  popup:menuItem{ text="Swap Hierarchy",
+                  onclick=function()
+                    app.transaction("Swap Hierarchy", function()
+                      swap_hierarchy(anchorLayerId)
+                    end)
+                  end }
   popup:showMenu()
   imi.dlg:repaint()
 end
@@ -1471,7 +1475,7 @@ local function imi_ongui()
               end
               imi.widget.onmousedown = function(widget)
                 if imi.mouseButton == MouseButton.RIGHT then
-                  show_hierarchy_menu(layerId)
+                  show_anchor_context_menu(layerId)
                 end
               end
               imi.popID(layerId)

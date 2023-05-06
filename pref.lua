@@ -11,6 +11,7 @@ local pref = {
   showTilesID = false,
   showTilesUsage = false,
   showUnusedTilesSemitransparent = true,
+  captureArrowKeys = false,
   zoom = 1.0,
 }
 
@@ -21,12 +22,14 @@ end
 function pref.load(plugin)
   pref.showTilesID = plugin.preferences.showTilesID
   pref.showTilesUsage = plugin.preferences.showTilesUsage
+  pref.captureArrowKeys = plugin.preferences.captureArrowKeys
   pref.setZoom(plugin.preferences.zoom)
 end
 
 function pref.save(plugin)
   plugin.preferences.showTilesID = pref.showTilesID
   plugin.preferences.showTilesUsage = pref.showTilesUsage
+  plugin.preferences.captureArrowKeys = pref.captureArrowKeys
   plugin.preferences.zoom = pref.zoom
 end
 

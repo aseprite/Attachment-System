@@ -1350,6 +1350,12 @@ local function show_options(rc)
                   onclick=commands.ShowTilesID,
                   selected=pref.showTilesID }
   popup:separator()
+  popup:menuItem{ text="Capture Arrow Keys",
+                  onclick=function()
+                    pref.captureArrowKeys = not pref.captureArrowKeys
+                  end,
+                  selected=pref.captureArrowKeys }
+  popup:separator()
   popup:menuItem{ text="Reset Zoom", onclick=commands.ResetZoom }
   popup:showMenu()
   imi.repaint()
@@ -1903,7 +1909,8 @@ function main.selectFocusedAttachment()
 end
 
 local function canvas_onkeydown(ev)
-  if not activeTilemap or
+  if not pref.captureArrowKeys or
+     not activeTilemap or
      not imi.focusedWidget then
     return
   end

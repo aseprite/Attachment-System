@@ -1589,6 +1589,9 @@ local function imi_ongui()
                   app.transaction("Change Ref Point", function()
                     tile.properties(PK).ref = ev.point - origin
                   end)
+                end,
+                oncancel=function(ev)
+                  activeAskPoint = nil
                 end
               }
             end
@@ -1617,6 +1620,9 @@ local function imi_ongui()
                         anchors[i].position = ev.point - origin
                         tile.properties(PK).anchors = anchors
                       end)
+                    end,
+                    oncancel=function(ev)
+                      activeAskPoint = nil
                     end
                   }
                 end

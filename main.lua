@@ -34,6 +34,7 @@ local WindowState = {
 local windowState = WindowState.NORMAL
 local possibleJoint = nil
 local activeAskPoint = nil -- Just to detect if we press the same button again
+local showGuessPartsButton = false -- True after inserting an attachment where we can try to guess its parts
 
 local function contains(t, item)
   for _,v in pairs(t) do
@@ -106,9 +107,12 @@ local function calculate_shrunken_bounds(tilemapLayer)
   shrunkenSize = size
 end
 
-local function calculate_tiles_histogram(tilemapLayer)
+local function calculate_tiles_histogram()
+  local layer = activeTilemap
+  assert(layer)
+  assert(layer.isTilemap)
   local histogram = {}
-  for _,cel in ipairs(tilemapLayer.cels) do
+  for _,cel in ipairs(layer.cels) do
     local ti = cel.image:getPixel(0, 0)
     if histogram[ti] == nil then
       histogram[ti] = 1
@@ -470,7 +474,7 @@ end
 --
 -- When no layer is specified, it will try to return the focusedItem
 -- or the activeTilemap tile.
-local function get_active_tile_index(layer)
+local function get_active_tile_index(layer, frame)
   if not layer then
     -- If there is a focused item, we'll return that one
     if focusedItem then
@@ -478,8 +482,11 @@ local function get_active_tile_index(layer)
     end
     layer = activeTilemap
   end
+  if not frame then
+    frame = app.frame
+  end
   if layer and layer.isTilemap then
-    local cel = layer:cel(app.frame)
+    local cel = layer:cel(frame)
     if cel and cel.image then
       return cel.image:getPixel(0, 0)
     end
@@ -506,8 +513,14 @@ local function get_active_folder()
   end
 end
 
-local function set_active_tile(ti)
-  if not activeTilemap then return end
+-- layer can be nil to use the activeTilemap by default
+local function set_active_tile(ti, layer)
+  if not layer then
+    layer = activeTilemap
+    if not layer then return end
+  end
+  assert(layer)
+  assert(layer.isTilemap)
 
   -- Go to normal state
   --
@@ -518,14 +531,16 @@ local function set_active_tile(ti)
   main.cancelJoint()
 
   app.transaction("Put Attachment", function()
-    local ts = get_base_tileset(activeTilemap)
-    local cel = activeTilemap:cel(app.activeFrame)
+    local spr = app.sprite
+    local layerId = layer.properties(PK).id
+    local ts = get_base_tileset(layer)
+    local cel = layer:cel(app.frame)
     local oldRefPoint
     local newRefPoint
 
     -- Change tilemap tile if are not showing categories
     -- We use Image:drawImage() to get undo information
-    if activeTilemap and cel and cel.image then
+    if cel and cel.image then
       local oldTi = cel.image:getPixel(0, 0)
       if oldTi then
         oldRefPoint = ts:tile(oldTi).properties(PK).ref
@@ -541,7 +556,7 @@ local function set_active_tile(ti)
       local image = Image(1, 1, ColorMode.TILEMAP)
       image:putPixel(0, 0, ti)
 
-      cel = app.activeSprite:newCel(activeTilemap, app.activeFrame, image, Point(0, 0))
+      cel = spr:newCel(layer, app.frame, image, Point(0, 0))
     end
 
     if ti then
@@ -554,11 +569,98 @@ local function set_active_tile(ti)
     end
 
     -- Align children of the new attachment layer only
-    main.alignAnchors(activeTilemap.properties(PK).id)
+    main.alignAnchors(layerId)
+
+    -- First guess: if the tile is used check if it has children, then
+    -- show the "Guess Parts" buttons
+    if layer == activeTilemap then
+      showGuessPartsButton = false
+      if tilesHistogram[ti] and tilesHistogram[ti] >= 1 then
+        local ts = get_base_tileset(layer)
+        local anchors = ts:tile(ti).properties(PK).anchors
+        if anchors and #anchors > 0 then
+          showGuessPartsButton = true
+        end
+      end
+    end
 
     imi.repaint()
     app.refresh()
   end)
+end
+
+local function insert_guessed_parts(fromLayerId, ti, hierarchy)
+  local spr = app.sprite
+  if not hierarchy then
+    hierarchy = {}
+    create_layers_hierarchy(spr.layers, hierarchy)
+  end
+
+  -- Get all frame numbers where the "ti" attachment is used
+
+  local layer = find_layer_by_id(spr.layers, fromLayerId)
+  local frames = {}
+  for fr=1,#spr.frames do
+    if get_active_tile_index(layer, fr) == ti then
+      table.insert(frames, fr)
+    end
+  end
+
+  -- Guess what are the most common children parts for "ti"
+
+  local partsHistogram = {}
+
+  for childId,parentId in pairs(hierarchy) do
+    if parentId == fromLayerId then
+      local child = find_layer_by_id(spr.layers, childId)
+      local histogram = {}
+
+      for _,fr in ipairs(frames) do
+        local cel = child:cel(fr)
+        if cel and cel.image then
+          local partTi = cel.image:getPixel(0, 0)
+          if not histogram[partTi] then
+            histogram[partTi] = 1
+          else
+            histogram[partTi] = histogram[partTi] + 1
+          end
+        end
+      end
+
+      partsHistogram[childId] = histogram
+    end
+  end
+
+  -- Create an array of actions (sub parts to change), if there is no
+  -- actions, there is no undoable transaction
+
+  local actions = {}
+  for k,v in pairs(partsHistogram) do
+    local bestPartTi = nil
+    for ti,n in pairs(v) do
+      if bestPartTi == nil or v[bestPartTi] < n then
+        bestPartTi = ti
+      end
+    end
+    if bestPartTi then
+      table.insert(actions, { childId=k, ti=bestPartTi })
+    end
+  end
+
+  if #actions > 0 then
+    app.transaction("Guess Parts", function()
+      for _,action in ipairs(actions) do
+        local child = find_layer_by_id(spr.layers, action.childId)
+        set_active_tile(action.ti, child)
+        insert_guessed_parts(action.childId, action.ti, hierarchy)
+      end
+
+      -- Re-align all children
+      if layer == activeTilemap then
+        main.alignAnchors(fromLayerId)
+      end
+    end)
+  end
 end
 
 -- Activates the next cel in the active layer where the given
@@ -1522,10 +1624,22 @@ local function imi_ongui()
             end
           end
         end
+        if showGuessPartsButton then
+          imi.alignFunc = function(cursor, size, lastBounds)
+            return Point(cursor.x, cursor.y + 8*imi.uiScale)
+          end
+          if imi.button("Guess Parts") then
+            insert_guessed_parts(activeTilemap.properties(PK).id, ti)
+            showGuessPartsButton = false
+            calculate_tiles_histogram()
+            imi.repaint()
+          end
+          imi.alignFunc = nil
+        end
         imi.endGroup()
-        imi.widget = imageWidget
 
         -- Context menu for active tile
+        imi.widget = imageWidget
         imi.widget.onmousedown = function(widget)
           if imi.mouseButton == MouseButton.RIGHT then
             show_tile_context_menu(ts, ti, activeTilemap.properties(PK).folders)
@@ -1667,7 +1781,7 @@ local function Sprite_change(ev)
   local repaint = ev.fromUndo
 
   if activeTilemap then
-    tilesHistogram = calculate_tiles_histogram(activeTilemap)
+    tilesHistogram = calculate_tiles_histogram()
     local tileImg = get_active_tile_image()
     if tileImg and
        (not activeTileImageInfo or
@@ -1898,7 +2012,7 @@ local function App_sitechange(ev)
     if activeTilemap then
       assert(activeTilemap.isTilemap)
       calculate_shrunken_bounds(activeTilemap)
-      tilesHistogram = calculate_tiles_histogram(activeTilemap)
+      tilesHistogram = calculate_tiles_histogram()
     else
       shrunkenBounds = Rectangle()
     end
@@ -1920,8 +2034,9 @@ local function App_sitechange(ev)
     activeTileImageInfo = {}
   end
 
-  -- Cancel any "select point" state
+  -- Cancel any "select point" state, or any extra UI button
   main.cancelJoint()
+  showGuessPartsButton = false
 
   if not imi.isongui and not ev.fromUndo then
     imi.repaint() -- TODO repaint only when it's needed

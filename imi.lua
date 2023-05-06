@@ -643,7 +643,7 @@ function imi.ondblclick(ev)
   local mouseWidgets = adjustMouseWidgetsDependingOnViewports()
   for i=#imi.mouseWidgets,1,-1 do
     local widget = imi.mouseWidgets[i]
-    if widget.ondblclick then
+    if widget and widget.ondblclick then
       widget.ondblclick(widget)
     end
   end

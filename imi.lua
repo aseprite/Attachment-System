@@ -824,9 +824,17 @@ function imi._toggle(id, text)
   return imi.widget.checked
 end
 
-function imi.toggle(text)
+function imi.toggle(text, checkedByDefault)
   local id = imi.getID()
-  return imi._toggle(id, text)
+  if checkedByDefault and imi.widgets[id] then
+    checkedByDefault = false
+  end
+  local result = imi._toggle(id, text)
+  if checkedByDefault then
+    imi.widgets[id].checked = true
+    result = true
+  end
+  return result
 end
 
 function imi.button(text)

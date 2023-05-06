@@ -1569,7 +1569,7 @@ local function imi_ongui()
 
         imi.beginGroup()
         imi.sameLine = false
-        local openFolder = imi.toggle(folder.name)
+        local openFolder = imi.toggle(folder.name, db.isBaseSetFolder(folder))
 
         -- Context menu for active folder
         imi.widget.onmousedown = function(widget)

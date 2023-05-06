@@ -15,5 +15,8 @@
         <key command="AttachmentSystem_AlignAnchors" shortcut="Space+Z" />
         <key command="AttachmentSystem_SelectFocusedAttachment" shortcut="Space+C" />
         <key command="AttachmentSystem_InsertJoint" shortcut="Space+X" />
+        <!-- Space+Shift+E new empty, Space+Shift+D duplicate attachment -->
+        <key command="AttachmentSystem_NewEmptyAttachment" shortcut="Shift+Space+E" />
+        <key command="AttachmentSystem_DuplicateAttachment" shortcut="Shift+Space+D" />
     </commands>
 </keyboard>

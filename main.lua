@@ -1477,6 +1477,7 @@ local function imi_ongui()
                 title="Change Ref Point",
                 point=tile.properties(PK).ref + origin,
                 onclick=function(ev)
+                  activeAskPoint = nil
                   app.transaction("Change Ref Point", function()
                     tile.properties(PK).ref = ev.point - origin
                   end)
@@ -1503,6 +1504,7 @@ local function imi_ongui()
                     title="Change Anchor Point for Layer " .. child.name,
                     point=anchors[i].position + origin,
                     onclick=function(ev)
+                      activeAskPoint = nil
                       app.transaction("Change Anchor Point", function()
                         anchors[i].position = ev.point - origin
                         tile.properties(PK).anchors = anchors

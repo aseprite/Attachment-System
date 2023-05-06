@@ -1368,6 +1368,7 @@ local function get_possible_attachments(point)
   for _,layer in ipairs(layers) do
     local cel = layer:cel(app.frame)
     if cel and cel.image and cel.bounds:contains(point) then
+      -- Use original layer tileset to get shruken bounds its tiles
       local ts = layer.tileset
       local ti = cel.image:getPixel(0, 0)
       local tileImg = ts:getTile(ti)
@@ -2087,19 +2088,26 @@ function main.startSelectingJoint()
   -- layer.
   local point = app.editor.spritePos
   if activeTilemap then
-    local child = activeTilemap
-    local childId = child.properties(PK).id
+    local layer = activeTilemap
+    local layerId = layer.properties(PK).id
     local attachments = get_possible_attachments(point)
     local anchorPoins = nil
     for i=1,#attachments do
-      if attachments[i] ~= child then
-        anchorPoint =
-          get_anchor_point_for_layer(attachments[i].tileset,
-                                     get_active_tile_index(attachments[i]),
-                                     childId)
+      if attachments[i] ~= layer then
+        -- Get base tileset to get anchor points
+        local ts = get_base_tileset(attachments[i])
+        local ti = get_active_tile_index(attachments[i])
+        anchorPoint = get_anchor_point_for_layer(ts, ti, layerId)
         if anchorPoint then
           point = anchorPoint
           break
+        elseif app.cel then
+          local ts = get_base_tileset(layer)
+          local ti = get_active_tile_index(layer)
+          if ts:tile(ti).properties(PK).ref then
+            point = ts:tile(ti).properties(PK).ref
+              + app.cel.position
+          end
         end
       end
     end

@@ -403,6 +403,101 @@ function main.alignAnchors(fromThisLayerId)
   end)
 end
 
+-- 'endChildren' is an in/out vector of layerId's without children
+local function find_end_children(layers, endChildren)
+  for _,child in ipairs(layers) do
+    if child.isTilemap then
+      local ts = get_base_tileset(child)
+      local anchorsFound = false
+      for i=1, #ts-1 do
+        if ts:tile(i).properties(PK).anchors and
+          #ts:tile(i).properties(PK).anchors > 0  then
+          anchorsFound = true
+          break
+        end
+      end
+      if not anchorsFound then
+        table.insert(endChildren, child.properties(PK).id)
+      end
+    elseif child.isGroup then
+      find_end_children(child.layers, endChildren)
+    end
+  end
+end
+
+-- Returns a vector of layerId's with ascending hierarchy.
+local function create_ascendant_chain(hierarchy, ascendant_chain)
+  local endChild = hierarchy[ascendant_chain[#ascendant_chain]]
+  if endChild then
+    table.insert(ascendant_chain, endChild)
+    ascendant_chain = create_ascendant_chain(hierarchy, ascendant_chain)
+  end
+  return ascendant_chain
+end
+
+-- Returns a vector of layer id's ascending hierarchy vectors.
+local function create_ascendant_chains(hierarchy)
+  local endChildren = {}
+  find_end_children(app.sprite.layers, endChildren)
+  local ascendants = {}
+  for i=1, #endChildren, 1 do
+    table.insert(ascendants,
+      create_ascendant_chain(hierarchy, { endChildren[i] }))
+  end
+  return ascendants
+end
+
+-- Dual parenting check
+local function willBeDualParent(layers, parent, childCandidate)
+  for _,otherParent in ipairs(layers) do
+    if otherParent.isTilemap and
+        otherParent.properties(PK).id ~= parent.properties(PK).id then
+      local ts = get_base_tileset(otherParent)
+      if ts then
+        for j=1, #ts-1, 1 do
+          if find_anchor_on_layer(otherParent, childCandidate, j) then
+            return true
+          end
+        end
+      end
+    elseif otherParent.isGroup and
+            willBeDualParent(otherParent.layers, parent, childCandidate) then
+      return true
+    end
+  end
+  return false
+end
+
+-- Hierarchy loop check
+local function isHierarchyLoop(parent, childCandidate)
+  local hierarchy = {}
+  create_layers_hierarchy(app.sprite.layers, hierarchy)
+  local ascendants = create_ascendant_chains(hierarchy)
+  for i=1, #ascendants do
+    local ascendant = ascendants[i]
+    local ascendantBelongsToChain = false
+    local ascendantIndex = 0
+    for j=1, #ascendant do
+      local layerId = ascendant[j]
+      if layerId == parent.properties(PK).id then
+        ascendantBelongsToChain = true
+        ascendantIndex = j
+      end
+    end
+    if ascendantBelongsToChain then
+      for j=1, #ascendant do
+        if j ~= ascendantIndex-1 then
+          local layerId = ascendant[j]
+          if layerId == childCandidate.properties(PK).id then
+            return true
+          end
+        end
+      end
+    end
+  end
+  return false
+end
+
 local function handle_drop_item_in_folder(folders,
                                           sourceFolderName, sourceItemIndex, sourceTileIndex,
                                           targetFolder, targetPosition)
@@ -925,75 +1020,73 @@ function main.highlightUsage()
 end
 
 local function unlink_anchor(anchorLayerId)
-  if not app.layer or
-     not app.cel or not app.cel.image or
-     not find_layer_by_id(app.layer.sprite.layers, anchorLayerId) then
-    return
-  end
+  assert(app.layer and app.cel and app.cel.image)
+  assert(find_layer_by_id(app.layer.sprite.layers, anchorLayerId))
+
   -- Get the tile from the base tileset to get ref/anchor points
   local layerA = app.layer
   local layerB = find_layer_by_id(layerA.sprite.layers, anchorLayerId)
-  if not layerB.tileset or not layerB:cel(app.frame) or
-     not layerB:cel(app.frame).image then
-    return
+
+  if not layerB.tileset then
+    return app.alert(layerB.name .. " doesn't have a tileset. Action aborted.")
   end
 
-  local celA = layerA:cel(app.frame)
-  local celB = layerB:cel(app.frame)
-  local tiA = celA.image:getPixel(0, 0)
-  local tiB = celB.image:getPixel(0, 0)
-  local idB = layerB.properties(PK).id
   local tsA = get_base_tileset(layerA)
   local tsB = get_base_tileset(layerB)
-  local anchorOnA = find_anchor_on_layer(layerA, layerB, tiA)
-  local refOnB = tsB:tile(tiB).properties(PK).ref
+  local idB = layerB.properties(PK).id
 
-  clear_anchor_point(tsA, tiA, idB)
-  if anchorOnA and refOnB and
-     celA.position + anchorOnA.position == celB.position + refOnB then
-    tsB:tile(tiB).properties(PK).ref = nil
+  for i=1, #tsA-1 do
+      clear_anchor_point(tsA, i, idB)
+  end
+  for i=1, #tsB-1 do
+    local refOnB = tsB:tile(i).properties(PK).ref
+    if refOnB then
+      tsB:tile(i).properties(PK).ref = nil
+    end
   end
   dlg:repaint()
 end
 
 local function swap_hierarchy(anchorLayerId)
-  if not app.layer or
-     not app.cel or not app.cel.image or
-     not find_layer_by_id(app.layer.sprite.layers, anchorLayerId) then
-    return
+  assert(app.layer and app.cel and app.cel.image)
+  assert(find_layer_by_id(app.layer.sprite.layers, anchorLayerId))
+
+  local layerA = app.layer -- parent, future child
+  local layerB = find_layer_by_id(layerA.sprite.layers, anchorLayerId) -- child, future parent
+
+  if not layerB.tileset then
+    return app.alert("Candidate parent layer " .. layerB.name .. " doesn't have a tileset. Action aborted.")
   end
-  local layerA = app.layer
-  local layerB = find_layer_by_id(layerA.sprite.layers, anchorLayerId)
-  if not layerB.tileset or not layerB:cel(app.frame) or
-     not layerB:cel(app.frame).image then
-    return
+  if willBeDualParent(app.sprite.layers, layerB, layerA) then
+    local parent1 = find_parent_layer(app.sprite.layers, layerA).name
+    local parent2 = layerB.name
+    return app.alert("Hierarchy cannot be swapped: candidate child '" ..
+      layerA.name .. "' will have '" .. parent1 .. "' & '" .. parent2 ..
+      "' as parents. Action aborted.")
   end
 
-  local celA = layerA:cel(app.frame)
-  local celB = layerB:cel(app.frame)
-  local tiA = celA.image:getPixel(0, 0)
-  local tiB = celB.image:getPixel(0, 0)
-  local idA = layerA.properties(PK).id
-  local idB = layerB.properties(PK).id
   local tsA = get_base_tileset(layerA)
   local tsB = get_base_tileset(layerB)
-  local anchorOnA = find_anchor_on_layer(layerA, layerB, tiA)
-  local refOnA = tsA:tile(tiA).properties(PK).ref
-  local refOnB = tsB:tile(tiB).properties(PK).ref
+  local idA = layerA.properties(PK).id
+  local idB = layerB.properties(PK).id
 
-  if celA.position + anchorOnA.position == celB.position + refOnB then
-    tsB:tile(tiB).properties(PK).ref = nil
+  for i=1, #tsA-1 do
+    local anchorOnA = find_anchor_on_layer(layerA, layerB, i)
+    if anchorOnA then
+      local pos = anchorOnA.position
+      clear_anchor_point(tsA, i, idB)
+      tsA:tile(i).properties(PK).ref = pos
+    end
   end
-  clear_anchor_point(tsA, tiA, idB)
-  if not refOnA then
-    set_ref_point(tsA, tiA, anchorOnA.position)
+
+  for i=1, #tsB-1 do
+    local refOnB = tsB:tile(i).properties(PK).ref
+    if refOnB then
+      tsB:tile(i).properties(PK).ref = nil
+      set_anchor_point(tsB, i, idA, refOnB)
+    end
   end
-  if refOnB then
-    local pos = celA.position + anchorOnA.position - celB.position
-    set_anchor_point(tsB, tiB, idA, pos)
-  else
-    set_anchor_point(tsB, tiB, idA, refOnB)
-  end
+
   dlg:repaint()
 end
 
@@ -1469,7 +1562,7 @@ local function imi_ongui()
     end
 
   -- Show options to create a joint between two layers in the current frame
-  elseif windowState == WindowState.SELECT_JOINT_POINT then
+    elseif windowState == WindowState.SELECT_JOINT_POINT then
 
     imi.label("Select Joint")
     if possibleJoint then
@@ -1479,23 +1572,39 @@ local function imi_ongui()
       imi.label(pt.x .. "x" .. pt.y)
       imi.sameLine = false
 
+      local noButtonShown = true
       if #attachments >= 2 then
         for i = 1,#attachments-1 do
           local a = attachments[i]
           local b = attachments[i+1]
-          local label = a.name .. " > " .. b.name
-          imi.pushID(i .. label)
-          if imi.button(label) then
-            insert_joint(a, b, pt)
-            main.cancelJoint()
+
+          local function addParentChildButton(parent, childCandidate, sameLine)
+            if not willBeDualParent(app.sprite.layers, parent, childCandidate) and
+               not isHierarchyLoop(parent, childCandidate) then
+              noButtonShown = false
+              local label = parent.name .. " -> " .. childCandidate.name
+              imi.pushID(i .. label)
+              if imi.button(label) then
+                insert_joint(parent, childCandidate, pt)
+                main.cancelJoint()
+              end
+              imi.sameLine = sameLine
+              imi.popID()
+            end
           end
-          imi.popID()
+
+          addParentChildButton(a, b, true)
+          addParentChildButton(b, a, false)
+        end
+        if noButtonShown then
+          imi.label("No viable anchor to assign.")
         end
       elseif #attachments == 1 then
         imi.label("One attachment: " .. attachments[1].name)
       else
         imi.label("No attachments")
       end
+      imi.sameLine = false
 
       if imi.button("Cancel") then
         main.cancelJoint()

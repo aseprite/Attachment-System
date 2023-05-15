@@ -1431,7 +1431,6 @@ local function imi_ongui()
         app.command.NewLayer{ tilemap=true, gridBounds=spr.bounds }
         activeTilemap = app.activeLayer
         folders = db.getLayerProperties(activeTilemap).folders
-        spr:newTile(activeTilemap.tileset)
         db.setupSprite(spr)
         set_active_tile(1)
       end)

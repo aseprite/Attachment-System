@@ -1151,7 +1151,7 @@ local function show_tile_info(ti)
                    lastBounds.y+lastBounds.height-size.height-2)
     end
     imi.label(string.format("[%d]", ti))
-    imi.widget.color = Color(255, 255, 0)
+    imi.widget.color = app.theme.color.textbox_text
     imi.alignFunc = nil
   end
   if pref.showTilesUsage then
@@ -1166,7 +1166,7 @@ local function show_tile_info(ti)
                    lastBounds.y+2)
     end
     imi.label(label)
-    imi.widget.color = Color(255, 255, 0)
+    imi.widget.color = app.theme.color.textbox_text
     imi.alignFunc = nil
   end
 
@@ -1179,7 +1179,7 @@ local function show_tile_info(ti)
                    lastBounds.y+2)
     end
     imi.label("R")
-    imi.widget.color = Color(255, 0, 0)
+    imi.widget.color = app.theme.color.flag_active
     imi.alignFunc = nil
   end
 end

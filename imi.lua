@@ -432,7 +432,7 @@ end
 
 -- Call Dialog:repaint() in case that we have to repaint and are
 -- outside ongui() loop.
-function processRepaintFlag()
+local function processRepaintFlag()
   if imi.dlg and
      imi.repaintFlag and
      not imi.isongui then -- If we are ongui() the repaint will be

@@ -789,7 +789,7 @@ function imi._toggle(id, text)
       local widget = updateWidget(id, { bounds=bounds })
       local draggingProcessed = false
 
-      function drawWidget(ctx)
+      local function drawWidget(ctx)
         local bounds = widget.bounds
 
         if widget.dragging and not draggingProcessed then
@@ -1310,6 +1310,16 @@ end
 function imi.getDropData(dataType)
   if imi.dragData then
     return imi.dragData[dataType]
+  else
+    return nil
+  end
+end
+
+function imi.popDropData(dataType)
+  if imi.dragData then
+    local data = imi.dragData[dataType]
+    imi.dragData[dataType] = nil
+    return data
   else
     return nil
   end

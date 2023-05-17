@@ -554,6 +554,16 @@ local function handle_drop_item_in_folder(folders,
     end)
 end
 
+
+local function handle_drop_folder(folders, draggedData, insertionPos)
+  local movedFolder = table.remove(folders, draggedData.index)
+  table.insert(folders, insertionPos, movedFolder)
+  app.transaction("Move Folder",
+    function()
+      activeTilemap.properties(PK).folders = folders
+    end)
+end
+
 local function get_active_tile_image()
   if activeTilemap then
     local cel = activeTilemap:cel(app.activeFrame)
@@ -1807,6 +1817,16 @@ local function imi_ongui()
         imi.beginGroup()
         imi.sameLine = false
         local openFolder = imi.toggle(folder.name, db.isBaseSetFolder(folder))
+        if imi.beginDrag() then
+          imi.setDragData("folder", { index=i, folder=folder.name })
+        elseif imi.beginDrop() then
+          local data = imi.popDropData("folder")
+          if data then
+            handle_drop_folder(folders, data, i)
+            imi.repaint()
+          end
+          imi.endDrop()
+        end
 
         -- Context menu for active folder
         imi.widget.onmousedown = function(widget)
@@ -1837,7 +1857,9 @@ local function imi_ongui()
           end
 
           if imi.beginDrop() then
-            local data = imi.getDropData("tile")
+            -- We need to pop the tile data to avoid that dropping a folder toggle into
+            -- a folder viewport creates the latest tile stored with setDragData.
+            local data = imi.popDropData("tile")
             if data and imi.highlightDropItemPos then
               handle_drop_item_in_folder(folders,
                                          data.folder, data.index, data.ti,
@@ -1863,7 +1885,9 @@ local function imi_ongui()
             if imi.beginDrag() then
               imi.setDragData("tile", { index=index, ti=ti, folder=folder.name })
             elseif imi.beginDrop() then
-              local data = imi.getDropData("tile")
+              -- We need to pop the tile data to avoid that dropping a folder toggle into
+              -- a tile image replaces it with the latest tile stored with setDragData.
+              local data = imi.popDropData("tile")
               if data and imi.highlightDropItemPos then
                 handle_drop_item_in_folder(folders,
                                            data.folder, data.index, data.ti,

@@ -1303,11 +1303,11 @@ local function show_categories_selector(categories, activeTileset)
   local spr = app.activeSprite
   local categories = activeTilemap.properties(PK).categories
 
-  function rename()
+  local function rename()
     new_or_rename_category_dialog(activeTileset)
   end
 
-  function delete()
+  local function delete()
     app.transaction("Delete Category", function()
       if categories then
         local catID = activeTileset.properties(PK).id
@@ -1511,7 +1511,7 @@ function main.newFolder()
   if folder then
     app.transaction("New Folder", function()
       local layerProperties = db.getLayerProperties(activeTilemap)
-      folders = layerProperties.folders
+      local folders = layerProperties.folders
       table.insert(folders, folder)
       activeTilemap.properties(PK).folders = folders
     end)
@@ -1525,7 +1525,7 @@ local function imi_ongui()
 
   imi.sameLine = true
 
-  function new_layer_button()
+  local function new_layer_button()
     if imi.button("New Layer") then
       app.transaction("New Layer", function()
         -- Create a new tilemap with the grid bounds as the canvas
@@ -1752,7 +1752,7 @@ local function imi_ongui()
                   show_anchor_context_menu(layerId)
                 end
               end
-              imi.popID(layerId)
+              imi.popID()
             end
           end
         end
@@ -2272,7 +2272,7 @@ function main.startSelectingJoint()
     local layer = activeTilemap
     local layerId = layer.properties(PK).id
     local attachments = get_possible_attachments(point)
-    local anchorPoins = nil
+    local anchorPoint = nil
     for i=1,#attachments do
       if attachments[i] ~= layer then
         -- Get base tileset to get anchor points

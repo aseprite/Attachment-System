@@ -171,7 +171,7 @@ function db.getBaseSetFolder(layer, folders)
       return folder
     end
   end
-  folder = createBaseSetFolder(layer)
+  local folder = createBaseSetFolder(layer)
   table.insert(folders, folder)
   return folder
 end

@@ -699,6 +699,52 @@ local function set_active_tile(ti, layer)
   end)
 end
 
+local function flip_active_tile(flipType)
+  if activeTilemap then
+    local cel = activeTilemap:cel(app.activeFrame)
+    if cel and cel.image then
+      app.transaction("Flip Attachment", function()
+        local baseTileset = get_base_tileset(activeTilemap)
+        local ti = cel.image:getPixel(0, 0)
+        local tile = activeTilemap.tileset:tile(ti)
+        local copy = Image(tile.image)
+        copy:flip(flipType)
+        tile.image = copy
+
+        -- Flip from reference point and anchor points
+        local properties = baseTileset:tile(ti).properties(PK)
+        local ref = properties.ref
+        local anchors = properties.anchors
+        if ref then
+          if flipType == FlipType.HORIZONTAL then
+            ref.x = copy.width - ref.x
+          else
+            ref.y = copy.height - ref.y
+          end
+          cel.position = cel.position + properties.ref - ref
+          properties.ref = ref
+        end
+        if anchors then
+          for i = 1,#anchors do
+            local anchor = anchors[i]
+            if flipType == FlipType.HORIZONTAL then
+              anchor.position.x = copy.width - anchor.position.x
+            else
+              anchor.position.y = copy.height - anchor.position.y
+            end
+            anchors[i] = anchor
+          end
+          properties.anchors = anchors
+        end
+        baseTileset:tile(ti).properties(PK, properties)
+
+        imi.repaint()
+        app.refresh()
+      end)
+    end
+  end
+end
+
 local function insert_guessed_parts(fromLayerId, ti, hierarchy)
   local spr = app.sprite
   if not hierarchy then
@@ -2248,6 +2294,20 @@ local function App_sitechange(ev)
   end
 end
 
+local function App_beforecommand(ev)
+  if ev.name == "Flip" and
+     ev.params.target == "mask" and
+     app.sprite.selection.isEmpty and
+     activeTilemap then
+    if ev.params.orientation == "horizontal" then
+      flip_active_tile(FlipType.HORIZONTAL)
+    elseif ev.params.orientation == "vertical" then
+      flip_active_tile(FlipType.VERTICAL)
+    end
+    ev.stopPropagation()
+  end
+end
+
 local function App_beforepaintemptytilemap()
   if activeTilemap then
     app.transaction("Set New Attachment", function()
@@ -2262,6 +2322,7 @@ end
 local function dialog_onclose()
   unobserve_sprite()
   app.events:off(App_sitechange)
+  app.events:off(App_beforecommand)
   app.events:off(App_beforepaintemptytilemap)
   dlg = nil
 end
@@ -2373,6 +2434,7 @@ function main.openDialog()
   App_sitechange({ fromUndo=false })
   app.events:on('sitechange', App_sitechange)
   if app.apiVersion >= 24 then
+    app.events:on('beforecommand', App_beforecommand)
     app.events:on('beforepaintemptytilemap', App_beforepaintemptytilemap)
   end
   observe_sprite(app.activeSprite)

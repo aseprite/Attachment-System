@@ -604,14 +604,18 @@ end
 -- Usage:
 --   folders, folder = get_active_folder()
 local function get_active_folder()
-  if activeTilemap and focusedItem then
+  if activeTilemap then
     local folders = activeTilemap.properties(PK).folders
     local folder
-    for i=1,#folders do
-      if folders[i].name == focusedItem.folder then
-        folder = folders[i]
-        break
+    if focusedItem then
+      for i=1,#folders do
+        if folders[i].name == focusedItem.folder then
+          folder = folders[i]
+          break
+        end
       end
+    else
+      folder = db.getBaseSetFolder(activeTilemap, folders)
     end
     return folders, folder
   else
@@ -918,7 +922,6 @@ end
 function main.newEmptyAttachment()
   local spr = activeTilemap.sprite
   local ts = activeTilemap.tileset
-  local ti = get_active_tile_index()
   local folders, folder = get_active_folder()
 
   -- TODO is it really needed to copy these anchors to the new empty attachment?
@@ -932,14 +935,15 @@ function main.newEmptyAttachment()
     end
   end
 
+  local tile
   app.transaction("New Empty Attachment", function()
-    local tile
     for_each_category_tileset(function(ts)
       local t = spr:newTile(ts)
       if tile == nil then
         tile = t
       else
-        assert(t.index == t.index)
+        -- The tile index must be the same on all categories
+        assert(t.index == tile.index)
       end
       t.properties(PK).anchors = auxAnchors
     end)
@@ -948,6 +952,12 @@ function main.newEmptyAttachment()
     end
   end)
   imi.repaint()
+
+  if tile then
+    return tile.index
+  else
+    return nil
+  end
 end
 
 function main.duplicateAttachment()
@@ -2238,9 +2248,21 @@ local function App_sitechange(ev)
   end
 end
 
+local function App_beforepaintemptytilemap()
+  if activeTilemap then
+    app.transaction("Set New Attachment", function()
+      local ti = main.newEmptyAttachment()
+      if ti ~= nil then
+        set_active_tile(ti)
+      end
+    end)
+  end
+end
+
 local function dialog_onclose()
   unobserve_sprite()
   app.events:off(App_sitechange)
+  app.events:off(App_beforepaintemptytilemap)
   dlg = nil
 end
 
@@ -2350,6 +2372,9 @@ function main.openDialog()
 
   App_sitechange({ fromUndo=false })
   app.events:on('sitechange', App_sitechange)
+  if app.apiVersion >= 24 then
+    app.events:on('beforepaintemptytilemap', App_beforepaintemptytilemap)
+  end
   observe_sprite(app.activeSprite)
 end
 

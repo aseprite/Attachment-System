@@ -2249,6 +2249,10 @@ end
 -- When the active site (active sprite, cel, frame, etc.) changes this
 -- function will be called.
 local function App_sitechange(ev)
+  if ev.fromUndo then
+    return
+  end
+
   local newSpr = app.activeSprite
   if newSpr ~= observedSprite then
     observe_sprite(newSpr)

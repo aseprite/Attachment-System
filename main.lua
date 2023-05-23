@@ -2277,12 +2277,15 @@ local function App_sitechange(ev)
     end
   end
 
+  activeTileImageInfo = {}
+  if ev.fromUndo then
+    return
+  end
+
   local tileImg = get_active_tile_image()
   if tileImg then
     activeTileImageInfo = { id=tileImg.id,
                             version=tileImg.version }
-  else
-    activeTileImageInfo = {}
   end
 
   -- Cancel any "select point" state, or any extra UI button

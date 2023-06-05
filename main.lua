@@ -1847,10 +1847,24 @@ local function imi_ongui()
         end
       end
 
+
       -- Folders
+      local foldersReorderingInProgress = false
+      -- Remember values before processing folders, because we will need them in case of having to re-process folders.
+      local cursor = Point(imi.cursor)
+      local sameLine = imi.sameLine
+      local breakLines = imi.breakLines
+      local drawListSize = #imi.drawList
 
+      ::processFolders::
       imi.rowHeight = 0
-
+      imi.cursor = Point(cursor)
+      imi.sameLine = sameLine
+      imi.breakLines = breakLines
+      while #imi.drawList > drawListSize do
+        table.remove(imi.drawList, #imi.drawList)
+      end
+      --print("#imi.drawList: "..#imi.drawList)
 
       -- TODO: Replace the 10 used here by the corresponding viewport border height+dialog bottom border height.
       local barSize = app.theme.dimension.mini_scrollbar_size
@@ -1866,15 +1880,19 @@ local function imi_ongui()
       folderWidgets.clear()
       local forceBreak = false
       for i,folder in ipairs(folders) do
-        imi.pushID(i .. folder.name)
+        imi.pushID(folder.name)
         imi.sameLine = true
         imi.breakLines = true
 
         imi.beginGroup()
         imi.sameLine = false
         local openFolder = imi.toggle(folder.name, db.isBaseSetFolder(folder))
-        if imi.beginDrag() then
+
+        local data = imi.getDropData("folder")
+        if imi.beginDrag2() then
           imi.setDragData("folder", { index=i, folder=folder.name })
+          imi.toggle(folder.name, false)
+          imi.endDrag2()
         elseif imi.beginDrop() then
           local data = imi.popDropData("folder")
           if data then
@@ -1882,6 +1900,17 @@ local function imi_ongui()
             imi.repaint()
           end
           imi.endDrop()
+        elseif imi.widget.hover and data and not foldersReorderingInProgress then
+          foldersReorderingInProgress = true
+          local movedFolder = table.remove(folders, data.index)
+          table.insert(folders, i, movedFolder)
+          imi.endGroup()
+          imi.popID()
+          imi.endViewport()
+          imi.popViewport()
+          goto processFolders
+        elseif imi.mouseButton == 0 then
+          imi.setDragData("folder", nil)
         end
 
         -- Context menu for active folder
@@ -1972,6 +2001,7 @@ local function imi_ongui()
           break
         end
       end
+      foldersReorderingInProgress = false
 
       imi.endViewport()
       imi.popViewport()

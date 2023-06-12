@@ -57,6 +57,8 @@ local imi = {
   draggingWidget = nil, -- Widget being dragged
   targetWidget = nil,   -- Where we drop the capturedWidget
   highlightDropItemPos = nil,  -- Column/Row position of a item dropped inside a viewport with itemSize
+  draggingInProgress = nil,
+  insideBeginDrag2Block = nil,
   drawList = {},
   lineHeight = 0,
 }
@@ -563,6 +565,9 @@ function imi.onmousemove(ev)
         imi.draggingWidget = widget
         imi.highlightDropItemPos = nil
       end
+      if imi.draggingInProgress then
+        imi.repaintFlag = true
+      end
       if pointInsideWidgetHierarchy(widget, imi.mousePos) then
         if not widget.hover then
           widget.hover = true
@@ -629,6 +634,7 @@ function imi.onmouseup(ev)
       imi.repaintFlag = true
     end
     imi.capturedWidget = nil
+    imi.draggingInProgress = false
   end
 
   processRepaintFlag()
@@ -783,44 +789,54 @@ function imi._toggle(id, text)
   local textSize = imi.ctx:measureText(text)
   local size = Size(textSize.width+wborder,
                     textSize.height+hborder)
-  advanceCursor(
-    size,
-    function(bounds)
-      local widget = updateWidget(id, { bounds=bounds })
-      local draggingProcessed = false
 
-      local function drawWidget(ctx)
-        local bounds = widget.bounds
+  local function draw(ctx, widget)
+    local bounds = widget.bounds
+    local partId
+    local color
+    if widget.pressed or
+      widget.checked then
+      partId = 'buttonset_item_pushed'
+      color = app.theme.color.button_selected_text
+    elseif widget.hover then
+      partId = 'buttonset_item_hot'
+      color = app.theme.color.button_hot_text
+    else
+      partId = 'buttonset_item_normal'
+      color = app.theme.color.button_normal_text
+    end
+    ctx:drawThemeRect(partId, bounds)
+    ctx.color = color
+    ctx:fillText(text,
+                bounds.x+(bounds.width-textSize.width)/2,
+                bounds.y+(bounds.height-textSize.height)/2)
+  end
 
-        if widget.dragging and not draggingProcessed then
-          draggingProcessed = true
-          -- Send this same widget to the end to draw it in the
-          -- dragged position (and without clipping)
-          addDrawListFunction(drawWidget)
-        end
-
-        local partId
-        local color
-        if widget.pressed or
-          widget.checked then
-          partId = 'buttonset_item_pushed'
-          color = app.theme.color.button_selected_text
-        elseif widget.hover then
-          partId = 'buttonset_item_hot'
-          color = app.theme.color.button_hot_text
-        else
-          partId = 'buttonset_item_normal'
-          color = app.theme.color.button_normal_text
-        end
-        ctx:drawThemeRect(partId, bounds)
-        ctx.color = color
-        ctx:fillText(text,
-                     bounds.x+(bounds.width-textSize.width)/2,
-                     bounds.y+(bounds.height-textSize.height)/2)
-      end
-
-      addDrawListFunction(drawWidget)
+  if imi.insideBeginDrag2Block then
+    local widget = updateWidget(id, { bounds=Rectangle{imi.mousePos.x, imi.mousePos.y, size.width, size.height} })
+    addDrawListFunction(function ()
+      addDrawListFunction(function(ctx) draw(ctx, widget) end)
     end)
+  else
+    advanceCursor(
+      size,
+      function(bounds)
+        local widget = updateWidget(id, { bounds=bounds })
+        local draggingProcessed = false
+
+        local function drawWidget(ctx)
+          if widget.dragging and not draggingProcessed then
+            draggingProcessed = true
+            -- Send this same widget to the end to draw it in the
+            -- dragged position (and without clipping)
+            addDrawListFunction(drawWidget)
+          end
+          draw(ctx, widget)
+        end
+
+        addDrawListFunction(drawWidget)
+      end)
+  end
   return imi.widget.checked
 end
 
@@ -1289,6 +1305,25 @@ function imi.beginDrag()
   else
     return false
   end
+end
+
+function imi.beginDrag2()
+  local widget = imi.widget
+
+  if widget.pressed then
+    imi.insideBeginDrag2Block = true
+    if not imi.draggingInProgress then
+      dragStartMousePos = imi.mousePos
+      imi.draggingInProgress = true
+    end
+    return true
+  else
+    return false
+  end
+end
+
+function imi.endDrag2()
+  imi.insideBeginDrag2Block = false
 end
 
 function imi.setDragData(dataType, data)

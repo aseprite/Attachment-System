@@ -176,6 +176,52 @@ function db.getBaseSetFolder(layer, folders)
   return folder
 end
 
+-- Gets the base tileset (the tileset assigned to the first category
+-- of the layer, or just the active tileset if the layer doesn't
+-- contain categories yet). This tileset is the one used to store the
+-- anchor/reference points per tile.
+function db.getBaseTileset(layer)
+  local ts = nil
+  local layerProperties = layer.properties(PK)
+  if layerProperties.categories and #layerProperties.categories then
+    ts = db.findTilesetByCategoryID(layer.sprite,
+                                    layerProperties.categories[1])
+    if not ts then
+      ts = layer.tileset
+    end
+  else
+    ts = layer.tileset
+  end
+  return ts
+end
+
+function db.findAnchorOnLayer(parentLayer, childLayer, parentTile)
+  if parentLayer.isTilemap and childLayer.isTilemap then
+    local baseTs = db.getBaseTileset(parentLayer)
+    local anchors = baseTs:tile(parentTile).properties(PK).anchors
+    if anchors and #anchors >= 1 then
+      for i=1, #anchors, 1 do
+        if anchors[i].layerId == childLayer.properties(PK).id then
+          return anchors[i]
+        end
+      end
+    end
+  end
+  return nil
+end
+
+function db.findParentLayer(layers, childLayer)
+  for _,layer in ipairs(layers) do
+    if layer.isGroup then
+      local result = db.findParentLayer(layer.layers, childLayer)
+      if result then return result end
+    elseif db.findAnchorOnLayer(layer, childLayer, 1) then
+      return layer
+    end
+  end
+  return nil
+end
+
 -- These properties should be set in setupLayers()/setupSprite(), but
 -- we can set them here just in case. Anyway if the setup functions
 -- don't fully setup the properties, we'll generate undo/redo

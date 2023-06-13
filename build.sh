@@ -13,4 +13,5 @@ zip Attachment-System-$version.aseprite-extension \
     main.lua \
     package.json \
     plugin.lua \
-    pref.lua
+    pref.lua \
+    usage.lua

@@ -8,6 +8,7 @@ local imi = require 'imi'
 local db = require 'db'
 local pref = require 'pref'
 local commands = require 'commands'
+local usage = require 'usage'
 local main = {}
 
 -- The main window/dialog
@@ -18,7 +19,6 @@ local activeTilemap -- Active tilemap (nil if the active layer isn't a tilemap)
 local shrunkenBoundsCache = {} -- Cache of shrunken bounds
 local shrunkenBounds = {} -- Minimal bounds between all tiles of the active layer
 local shrunkenSize = Size(1, 1) -- Minimal size between all tiles of the active layer
-local tilesHistogram = {} -- How many times each tile is used in the active layer
 local activeTileImageInfo = {} -- Used to re-calculate info when the tile image changes
 local focusedItem = nil        -- Folder + item with the keyboard focus
 local focusFolderItem = nil
@@ -108,22 +108,6 @@ local function calculate_shrunken_bounds(tilemapLayer)
   shrunkenSize = size
 end
 
-local function calculate_tiles_histogram()
-  local layer = activeTilemap
-  assert(layer)
-  assert(layer.isTilemap)
-  local histogram = {}
-  for _,cel in ipairs(layer.cels) do
-    local ti = cel.image:getPixel(0, 0)
-    if histogram[ti] == nil then
-      histogram[ti] = 1
-    else
-      histogram[ti] = histogram[ti] + 1
-    end
-  end
-  return histogram
-end
-
 local function remap_tiles_in_tilemap_layer_delete_index(tilemapLayer, deleteTi)
   for _,cel in ipairs(tilemapLayer.cels) do
     local ti = cel.image:getPixel(0, 0)
@@ -165,51 +149,6 @@ local function find_tileset_by_name(spr, name)
     local tileset = spr.tilesets[i]
     if tileset and tileset.name == name then
       return tileset
-    end
-  end
-  return nil
-end
-
--- Gets the base tileset (the tileset assigned to the first category
--- of the layer, or just the active tileset if the layer doesn't
--- contain categories yet). This tileset is the one used to store the
--- anchor/reference points per tile.
-local function get_base_tileset(layer)
-  local ts = nil
-  local layerProperties = layer.properties(PK)
-  if layerProperties.categories and #layerProperties.categories then
-    ts = db.findTilesetByCategoryID(layer.sprite,
-                                    layerProperties.categories[1])
-    if not ts then
-      ts = layer.tileset
-    end
-  else
-    ts = layer.tileset
-  end
-  return ts
-end
-
-local function find_anchor_on_layer(parentLayer, childLayer, parentTile)
-  if parentLayer.isTilemap and childLayer.isTilemap then
-    local anchors = get_base_tileset(parentLayer):tile(parentTile).properties(PK).anchors
-    if anchors and #anchors >= 1 then
-      for i=1, #anchors, 1 do
-        if anchors[i].layerId == childLayer.properties(PK).id then
-          return anchors[i]
-        end
-      end
-    end
-  end
-  return nil
-end
-
-local function find_parent_layer(layers, childLayer)
-  for _,layer in ipairs(layers) do
-    if layer.isGroup then
-      local result = find_parent_layer(layer.layers, childLayer)
-      if result then return result end
-    elseif find_anchor_on_layer(layer, childLayer, 1) then
-      return layer
     end
   end
   return nil
@@ -298,7 +237,7 @@ local function create_layers_hierarchy(layers, hierarchy)
     if layer.isTilemap then
       local layerProperties = layer.properties(PK)
       if layerProperties.id then
-        local ts = get_base_tileset(layer)
+        local ts = db.getBaseTileset(layer)
         for ti=1,#ts-1 do
           local anchors = ts:tile(ti).properties(PK).anchors
           if anchors then
@@ -367,9 +306,9 @@ function main.alignAnchors(fromThisLayerId)
         local childCel = child:cel(fr)
         if parentCel and parentCel.image and
            childCel and childCel.image then
-          local parentTs = get_base_tileset(parent)
+          local parentTs = db.getBaseTileset(parent)
           local parentTi = parentCel.image:getPixel(0, 0)
-          local childTs = get_base_tileset(child)
+          local childTs = db.getBaseTileset(child)
           local childTi = childCel.image:getPixel(0, 0)
 
           local refPoint = childTs:tile(childTi).properties(PK).ref
@@ -408,7 +347,7 @@ end
 local function find_end_children(layers, endChildren)
   for _,child in ipairs(layers) do
     if child.isTilemap then
-      local ts = get_base_tileset(child)
+      local ts = db.getBaseTileset(child)
       local anchorsFound = false
       for i=1, #ts-1 do
         if ts:tile(i).properties(PK).anchors and
@@ -453,10 +392,10 @@ local function will_be_dual_parent(layers, parent, childCandidate)
   for _,otherParent in ipairs(layers) do
     if otherParent.isTilemap and
         otherParent.properties(PK).id ~= parent.properties(PK).id then
-      local ts = get_base_tileset(otherParent)
+      local ts = db.getBaseTileset(otherParent)
       if ts then
         for j=1, #ts-1, 1 do
-          if find_anchor_on_layer(otherParent, childCandidate, j) then
+          if db.findAnchorOnLayer(otherParent, childCandidate, j) then
             return true
           end
         end
@@ -643,7 +582,7 @@ local function set_active_tile(ti, layer)
   app.transaction("Put Attachment", function()
     local spr = app.sprite
     local layerId = layer.properties(PK).id
-    local ts = get_base_tileset(layer)
+    local ts = db.getBaseTileset(layer)
     local cel = layer:cel(app.frame)
     local oldRefPoint
     local newRefPoint
@@ -660,7 +599,7 @@ local function set_active_tile(ti, layer)
       tilemapCopy:putPixel(0, 0, ti)
 
       -- This will trigger a Sprite_change() where we
-      -- re-calculate shrunkenBounds, tilesHistogram, etc.
+      -- re-calculate shrunken bounds, tiles histogram, etc.
       cel.image:drawImage(tilemapCopy)
     else
       local image = Image(1, 1, ColorMode.TILEMAP)
@@ -685,8 +624,8 @@ local function set_active_tile(ti, layer)
     -- show the "Guess Parts" buttons
     if layer == activeTilemap then
       showGuessPartsButton = false
-      if tilesHistogram[ti] and tilesHistogram[ti] >= 1 then
-        local ts = get_base_tileset(layer)
+      if usage.isUsedTile(ti) then
+        local ts = db.getBaseTileset(layer)
         local anchors = ts:tile(ti).properties(PK).anchors
         if anchors and #anchors > 0 then
           showGuessPartsButton = true
@@ -704,7 +643,7 @@ local function flip_active_tile(flipType)
     local cel = activeTilemap:cel(app.activeFrame)
     if cel and cel.image then
       app.transaction("Flip Attachment", function()
-        local baseTileset = get_base_tileset(activeTilemap)
+        local baseTileset = db.getBaseTileset(activeTilemap)
         local ti = cel.image:getPixel(0, 0)
         local tile = activeTilemap.tileset:tile(ti)
         local copy = Image(tile.image)
@@ -819,53 +758,6 @@ local function insert_guessed_parts(fromLayerId, ti, hierarchy)
   end
 end
 
--- Activates the next cel in the active layer where the given
--- attachment (ti) is used.
-local MODE_FORWARD = 0
-local MODE_BACKWARDS = 1
-local function find_next_attachment_usage(ti, mode)
-  if not app.activeFrame then return end
-
-  local iniFrame = app.activeFrame.frameNumber
-  local prevMatch = nil
-  local istart, iend, istep
-  local isPrevious
-
-  if mode == MODE_BACKWARDS then
-    istart = #activeTilemap.cels
-    iend = 1
-    istep = -1
-    isPrevious = function(frameNum) return frameNum >= iniFrame end
-  else
-    istart = 1
-    iend = #activeTilemap.cels
-    istep = 1
-    isPrevious = function(frameNum) return frameNum <= iniFrame end
-  end
-
-  local cels = activeTilemap.cels
-  for i=istart,iend,istep do
-    local cel = cels[i]
-    if isPrevious(cel.frameNumber) and prevMatch then
-      -- Go to next/prev frame...
-    elseif cel.image then
-      -- Check if this is cel is an instance of the given attachment (ti)
-      local celTi = cel.image:getPixel(0, 0)
-      if celTi == ti then
-        if isPrevious(cel.frameNumber) then
-          prevMatch = cel
-        else
-          app.activeCel = cel
-          return
-        end
-      end
-    end
-  end
-  if prevMatch then
-    app.activeCel = prevMatch
-  end
-end
-
 local function find_folder_items_by_tile(folder, tileId)
   local items = {}
   for i=1, #folder.items, 1 do
@@ -961,10 +853,6 @@ local function add_in_folder_and_base_set(folders, folder, ti)
   activeTilemap.properties(PK).folders = folders
 end
 
-local function is_unused_tile(ti)
-  return tilesHistogram[ti] == nil
-end
-
 function main.newEmptyAttachment()
   local spr = activeTilemap.sprite
   local ts = activeTilemap.tileset
@@ -1023,7 +911,7 @@ function main.duplicateAttachment()
     end)
 
     -- Copy ref point in the base tileset
-    local baseTileset = get_base_tileset(activeTilemap)
+    local baseTileset = db.getBaseTileset(activeTilemap)
     baseTileset:tile(#baseTileset-1).properties(PK).ref =
       baseTileset:tile(ti).properties(PK).ref
 
@@ -1049,10 +937,10 @@ function main.deleteAttachment()
   end
   if folder and (not db.isBaseSetFolder(folder) or
                  repeatedTiOnBaseFolder or
-                 is_unused_tile(ti)) then
+                 usage.isUnusedTile(ti)) then
     app.transaction("Delete Attachment", function()
       if db.isBaseSetFolder(folder) and
-        not repeatedTiOnBaseFolder and is_unused_tile(ti) then
+        not repeatedTiOnBaseFolder and usage.isUnusedTile(ti) then
         for_each_category_tileset(function(ts)
             spr:deleteTile(ts, ti)
         end)
@@ -1098,8 +986,8 @@ local function unlink_anchor(anchorLayerId)
     return app.alert(layerB.name .. " doesn't have a tileset. Action aborted.")
   end
 
-  local tsA = get_base_tileset(layerA)
-  local tsB = get_base_tileset(layerB)
+  local tsA = db.getBaseTileset(layerA)
+  local tsB = db.getBaseTileset(layerB)
   local idB = layerB.properties(PK).id
 
   for i=1, #tsA-1 do
@@ -1125,20 +1013,20 @@ local function swap_hierarchy(anchorLayerId)
     return app.alert("Candidate parent layer " .. layerB.name .. " doesn't have a tileset. Action aborted.")
   end
   if will_be_dual_parent(app.sprite.layers, layerB, layerA) then
-    local parent1 = find_parent_layer(app.sprite.layers, layerA).name
+    local parent1 = db.findParentLayer(app.sprite.layers, layerA).name
     local parent2 = layerB.name
     return app.alert("Hierarchy cannot be swapped: candidate child '" ..
       layerA.name .. "' will have '" .. parent1 .. "' & '" .. parent2 ..
       "' as parents. Action aborted.")
   end
 
-  local tsA = get_base_tileset(layerA)
-  local tsB = get_base_tileset(layerB)
+  local tsA = db.getBaseTileset(layerA)
+  local tsB = db.getBaseTileset(layerB)
   local idA = layerA.properties(PK).id
   local idB = layerB.properties(PK).id
 
   for i=1, #tsA-1 do
-    local anchorOnA = find_anchor_on_layer(layerA, layerB, i)
+    local anchorOnA = db.findAnchorOnLayer(layerA, layerB, i)
     if anchorOnA then
       local pos = anchorOnA.position
       clear_anchor_point(tsA, i, idB)
@@ -1200,7 +1088,7 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   end
   if folder and (not db.isBaseSetFolder(folder) or
                  repeatedTiOnBaseFolder or
-                 is_unused_tile(ti)) then
+                 usage.isUnusedTile(ti)) then
     popup:separator()
     popup:menuItem{ text="&Delete", onclick=commands.DeleteAttachment }
   end
@@ -1222,10 +1110,10 @@ local function show_tile_info(ti)
   end
   if pref.showTilesUsage then
     local label
-    if tilesHistogram[ti] == nil then
+    if usage.isUnusedTile(ti) then
       label = "Unused"
     else
-      label = tostring(tilesHistogram[ti])
+      label = tostring(usage.getTileFreq(ti))
     end
     imi.alignFunc = function(cursor, size, lastBounds)
       return Point(lastBounds.x+2,
@@ -1238,7 +1126,7 @@ local function show_tile_info(ti)
 
   -- As the reference point is only in the base category, we have to
   -- check its existence in the base category
-  local baseTileset = get_base_tileset(activeTilemap)
+  local baseTileset = db.getBaseTileset(activeTilemap)
   if baseTileset:tile(ti).properties(PK).ref == nil then
     imi.alignFunc = function(cursor, size, lastBounds)
       return Point(lastBounds.x+lastBounds.width-size.width-2,
@@ -1257,8 +1145,7 @@ local function create_tile_view(folders, folder,
   local tileImg = ts:getTile(ti)
 
   local paintAlpha = 255
-  if pref.showUnusedTilesSemitransparent and
-     tilesHistogram[ti] == nil then
+  if pref.showUnusedTilesSemitransparent and usage.isUnusedTile(ti) then
     paintAlpha = 128
   end
 
@@ -1548,8 +1435,8 @@ local function insert_joint(layerA, layerB, point)
 
     local idA = layerA.properties(PK).id
     local idB = layerB.properties(PK).id
-    local tsA = get_base_tileset(layerA)
-    local tsB = get_base_tileset(layerB)
+    local tsA = db.getBaseTileset(layerA)
+    local tsB = db.getBaseTileset(layerB)
     local celA = layerA:cel(app.frame)
     local celB = layerB:cel(app.frame)
     local tiA = celA.image:getPixel(0, 0)
@@ -1730,7 +1617,7 @@ local function imi_ongui()
       do
         local tileImg = ts:getTile(ti)
         -- Get the tile from the base tileset to get ref/anchor points
-        local tile = get_base_tileset(activeTilemap):tile(ti)
+        local tile = db.getBaseTileset(activeTilemap):tile(ti)
 
         -- Tile preview + ref/anchors point buttons
         imi.sameLine = false
@@ -1819,7 +1706,7 @@ local function imi_ongui()
           if imi.button("Guess Parts") then
             insert_guessed_parts(activeTilemap.properties(PK).id, ti)
             showGuessPartsButton = false
-            calculate_tiles_histogram()
+            usage.calculateHistogram(activeTilemap)
             imi.repaint()
           end
           imi.alignFunc = nil
@@ -1985,7 +1872,7 @@ local function Sprite_change(ev)
   local repaint = ev.fromUndo
 
   if activeTilemap then
-    tilesHistogram = calculate_tiles_histogram()
+    usage.calculateHistogram(activeTilemap)
     local tileImg = get_active_tile_image()
     if tileImg and
        (not activeTileImageInfo or
@@ -2263,7 +2150,7 @@ local function App_sitechange(ev)
     if activeTilemap then
       assert(activeTilemap.isTilemap)
       calculate_shrunken_bounds(activeTilemap)
-      tilesHistogram = calculate_tiles_histogram()
+      usage.calculateHistogram(activeTilemap)
     else
       shrunkenBounds = Rectangle()
     end
@@ -2333,14 +2220,14 @@ end
 function main.findNextAttachmentUsage()
   local ti = get_active_tile_index()
   if ti then
-    find_next_attachment_usage(ti, MODE_FORWARD)
+    app.cel = usage.findNext(activeTilemap, app.frame.frameNumber, ti)
   end
 end
 
 function main.findPrevAttachmentUsage()
   local ti = get_active_tile_index()
   if ti then
-    find_next_attachment_usage(ti, MODE_BACKWARDS)
+    app.cel = usage.findPrev(activeTilemap, app.frame.frameNumber, ti)
   end
 end
 
@@ -2362,14 +2249,14 @@ function main.startSelectingJoint()
     for i=1,#attachments do
       if attachments[i] ~= layer then
         -- Get base tileset to get anchor points
-        local ts = get_base_tileset(attachments[i])
+        local ts = db.getBaseTileset(attachments[i])
         local ti = get_active_tile_index(attachments[i])
         anchorPoint = get_anchor_point_for_layer(ts, ti, layerId)
         if anchorPoint then
           point = anchorPoint
           break
         elseif app.cel then
-          local ts = get_base_tileset(layer)
+          local ts = db.getBaseTileset(layer)
           local ti = get_active_tile_index(layer)
           if ts:tile(ti).properties(PK).ref then
             point = ts:tile(ti).properties(PK).ref

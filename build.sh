@@ -8,6 +8,7 @@ zip Attachment-System-$version.aseprite-extension \
     commands.lua \
     db.lua \
     default.aseprite-keys \
+    edit-attachment.lua \
     export.lua \
     imi.lua \
     main.lua \

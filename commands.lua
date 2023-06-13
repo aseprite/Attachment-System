@@ -62,6 +62,10 @@ function commands.DuplicateAttachment()
   main.duplicateAttachment()
 end
 
+function commands.EditAttachment()
+  main.editAttachment()
+end
+
 function commands.DeleteAttachment()
   main.deleteAttachment()
 end
@@ -138,6 +142,7 @@ function commands.registerCommands(plugin)
     { newSeparator=true },
     { newCommand="NewEmptyAttachment", title="New Empty Attachment" },
     { newCommand="DuplicateAttachment", title="Duplicate Attachment" },
+    { newCommand="EditAttachment", title="Edit Attachment" },
     { newCommand="DeleteAttachment", title="Delete Attachment" },
     { newSeparator=true },
     { newCommand="NewFolder", title="New Attachments Folder" },

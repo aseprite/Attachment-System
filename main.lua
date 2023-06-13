@@ -9,6 +9,7 @@ local db = require 'db'
 local pref = require 'pref'
 local commands = require 'commands'
 local usage = require 'usage'
+local editAttachment = require 'edit-attachment'
 local main = {}
 
 -- The main window/dialog
@@ -922,6 +923,21 @@ function main.duplicateAttachment()
   imi.repaint()
 end
 
+function main.editAttachment()
+  local ti = get_active_tile_index()
+  if editAttachment.isEditing(app.sprite) then
+    editAttachment.acceptChanges()
+  else
+    editAttachment.startEditing(ti,
+      -- After editing callback (OK or Cancel)
+      function()
+        if app.layer and app.layer.isTilemap then
+          calculate_shrunken_bounds(app.layer)
+        end
+      end)
+  end
+end
+
 function main.deleteAttachment()
   local spr = activeTilemap.sprite
   local ti = get_active_tile_index()
@@ -1078,6 +1094,8 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
   popup:separator()
   popup:menuItem{ text="Ne&w Empty", onclick=commands.NewEmptyAttachment }
   popup:menuItem{ text="Dupli&cate", onclick=commands.DuplicateAttachment }
+  popup:separator()
+  popup:menuItem{ text="&Edit Attachment", onclick=commands.EditAttachment }
   popup:separator()
   popup:menuItem{ text="&Highlight Usage", onclick=commands.HighlightUsage }
   popup:menuItem{ text="Find &Next Usage", onclick=commands.FindNext }
@@ -1484,8 +1502,22 @@ local function imi_ongui()
     end
   end
 
+  -- Editing attachments
+  if editAttachment.isEditing(spr) then
+
+    imi.label("Editing Attachments...")
+    imi.sameLine = false
+    if imi.button("OK") then
+      editAttachment.acceptChanges()
+    end
+
+    imi.sameLine = true
+    if imi.button("Cancel") then
+      editAttachment.cancelChanges()
+    end
+
   -- No active sprite: Show a button to create a new sprite
-  if not spr then
+  elseif not spr then
     dlg:modify{ title=title }
 
     if imi.button("New Sprite") then
@@ -1889,6 +1921,8 @@ local function Sprite_change(ev)
       activeTileImageInfo = {}
     end
   end
+
+  editAttachment.onSpriteChange()
 
   if repaint then
     imi.repaint()

@@ -59,6 +59,7 @@ local imi = {
   highlightDropItemPos = nil,  -- Column/Row position of a item dropped inside a viewport with itemSize
   drawList = {},
   lineHeight = 0,
+  mouseMoveReceived = false,
 }
 
 ----------------------------------------------------------------------
@@ -71,10 +72,9 @@ local WidgetFlags = {
   FOCUSED = 4,
   CHECKED = 8,
   HOVER = 16,
-  DRAGGING = 32,
-  HAS_HBAR = 64,
-  HAS_VBAR = 128,
-  WANTS_FOCUS = 256,
+  HAS_HBAR = 32,
+  HAS_VBAR = 64,
+  WANTS_FOCUS = 128,
 }
 
 -- Reset these variables before calling ongui()
@@ -137,7 +137,6 @@ local flagNames = {
   focused=WidgetFlags.FOCUSED,
   checked=WidgetFlags.CHECKED,
   hover=WidgetFlags.HOVER,
-  dragging=WidgetFlags.DRAGGING,
   hasHBar=WidgetFlags.HAS_HBAR,
   hasVBar=WidgetFlags.HAS_VBAR,
   wantsFocus=WidgetFlags.WANTS_FOCUS,
@@ -450,10 +449,7 @@ function imi.init(values)
   imi.ongui = values.ongui
   imi.canvasId = values.canvas
   imi.widget = nil
-  if imi.draggingWidget then
-    imi.draggingWidget.dragging = false
-    imi.draggingWidget = nil
-  end
+  imi.draggingWidget = nil
 end
 
 function imi.focusWidget(widget)
@@ -498,7 +494,7 @@ function imi.onpaint(ev)
       -- Build mouseWidgets collection (using its final bounds
       -- position)
       for _,widget in ipairs(imi.mouseWidgetCandidates) do
-        if not widget.dragging and
+        if not imi.isDragging(widget) and
            pointInsideWidgetHierarchy(widget, imi.mousePos) then
           table.insert(imi.mouseWidgets, widget)
         end
@@ -552,15 +548,15 @@ function imi.onmousemove(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = ev.button
   imi.mouseCursor = MouseCursor.ARROW
+  imi.mouseMoveReceived = true
 
   for id,widget in pairs(imi.widgets) do
     if widget.bounds then
       if widget.onmousemove then
         widget.onmousemove(widget)
       end
-      if widget.dragging then
+      if imi.draggingWidget then
         imi.repaintFlag = true
-        imi.draggingWidget = widget
         imi.highlightDropItemPos = nil
       end
       if pointInsideWidgetHierarchy(widget, imi.mousePos) then
@@ -582,11 +578,20 @@ end
 function imi.onmousedown(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = ev.button
+  imi.mouseMoveReceived = false
+
+  local openContextMenu =
+    ((ev.button == MouseButton.RIGHT) or
+     (ev.button == MouseButton.LEFT and ev.ctrlKey))
 
   local mouseWidgets = adjustMouseWidgetsDependingOnViewports()
   for i=#mouseWidgets,1,-1 do
     local widget = mouseWidgets[i]
     assert(widget ~= nil)
+    if openContextMenu and widget.oncontextmenu then
+      widget.oncontextmenu()
+      break
+    end
     if widget.onmousedown then
       widget.onmousedown(widget)
     end
@@ -612,24 +617,29 @@ end
 function imi.onmouseup(ev)
   imi.mousePos = Point(ev.x, ev.y)
   imi.mouseButton = 0
+  imi.mouseMoveReceived = false
 
   if imi.capturedWidget then
     local widget = imi.capturedWidget
     if widget.onmouseup then
       widget.onmouseup(widget)
     end
+
+    if imi.draggingWidget then
+      imi.targetWidget = imi.mouseWidgets[#imi.mouseWidgets]
+      imi.draggingWidget = nil
+    end
+
     if widget.pressed then
-      if widget.dragging then
-        imi.targetWidget = imi.mouseWidgets[#imi.mouseWidgets]
-        imi.draggingWidget = nil
-        widget.dragging = false
-      end
       widget.pressed = false
       widget.checked = not widget.checked
       imi.repaintFlag = true
     end
     imi.capturedWidget = nil
   end
+
+  -- Reset dragging widget just in case if it's floating
+  imi.draggingWidget = nil
 
   processRepaintFlag()
 
@@ -792,7 +802,7 @@ function imi._toggle(id, text)
       local function drawWidget(ctx)
         local bounds = widget.bounds
 
-        if widget.dragging and not draggingProcessed then
+        if imi.isDragging(widget) and not draggingProcessed then
           draggingProcessed = true
           -- Send this same widget to the end to draw it in the
           -- dragged position (and without clipping)
@@ -895,7 +905,7 @@ function imi.image(image, srcRect, dstSize, scale, alpha)
         local function drawWidget(ctx)
           local bounds = widget.bounds
 
-          if widget.dragging and not draggingProcessed then
+          if imi.isDragging(widget) and not draggingProcessed then
             draggingProcessed = true
             -- Send this same widget to the end to draw it in the
             -- dragged position (and without clipping)
@@ -1265,11 +1275,15 @@ end
 -- Drag & Drop
 ----------------------------------------------------------------------
 
+function imi.isDragging(widget)
+  return imi.draggingWidget and imi.draggingWidget.id == widget.id
+end
+
 function imi.beginDrag()
   local widget = imi.widget
 
-  if widget.pressed then
-    if widget.dragging then
+  if widget.pressed and imi.mouseMoveReceived then
+    if imi.isDragging(widget) then
       local pt = widget.bounds.origin
       local delta = imi.mousePos - dragStartMousePos
       pt = pt + delta
@@ -1282,8 +1296,11 @@ function imi.beginDrag()
       end
     else
       dragStartMousePos = imi.mousePos
-      imi.widget.dragging = true
+
       imi.capturedWidget = imi.widget
+      imi.draggingWidget = widget
+      imi.highlightDropItemPos = nil
+      imi.repaintFlag = true
     end
     return true
   else

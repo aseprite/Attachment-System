@@ -1191,11 +1191,8 @@ local function create_tile_view(folders, folder,
     focusedItem = { folder=folder.name, index=index, tile=ti, position=itemPos }
   end
 
-  imi.widget.onmousedown = function(widget)
-    -- Context menu
-    if imi.mouseButton == MouseButton.RIGHT then
-      show_tile_context_menu(ts, ti, folders, folder, index)
-    end
+  imi.widget.oncontextmenu = function()
+    show_tile_context_menu(ts, ti, folders, folder, index)
   end
 
   imi.widget.ondblclick = function(ev)
@@ -1623,10 +1620,8 @@ local function imi_ongui()
             show_categories_selector(categories, activeTileset)
           end)
       end
-      imi.widget.onmousedown = function(widget) -- TODO merge this with regular imi.button() click
-        if imi.mouseButton == MouseButton.RIGHT then
-          show_categories_selector(categories, activeTileset)
-        end
+      imi.widget.oncontextmenu = function() -- TODO merge this with regular imi.button() click
+        show_categories_selector(categories, activeTileset)
       end
 
       if imi.button("New Folder") then
@@ -1722,10 +1717,8 @@ local function imi_ongui()
                   }
                 end
               end
-              imi.widget.onmousedown = function(widget)
-                if imi.mouseButton == MouseButton.RIGHT then
-                  show_anchor_context_menu(layerId)
-                end
+              imi.widget.oncontextmenu = function()
+                show_anchor_context_menu(layerId)
               end
               imi.popID()
             end
@@ -1747,10 +1740,8 @@ local function imi_ongui()
 
         -- Context menu for active tile
         imi.widget = imageWidget
-        imi.widget.onmousedown = function(widget)
-          if imi.mouseButton == MouseButton.RIGHT then
-            show_tile_context_menu(ts, ti, activeTilemap.properties(PK).folders)
-          end
+        imi.widget.oncontextmenu = function()
+          show_tile_context_menu(ts, ti, activeTilemap.properties(PK).folders)
         end
 
         if imi.beginDrag() then
@@ -1804,10 +1795,8 @@ local function imi_ongui()
         end
 
         -- Context menu for active folder
-        imi.widget.onmousedown = function(widget)
-          if imi.mouseButton == MouseButton.RIGHT then
-            show_folder_context_menu(folders, folder)
-          end
+        imi.widget.oncontextmenu  = function()
+          show_folder_context_menu(folders, folder)
         end
 
         if openFolder then

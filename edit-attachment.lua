@@ -38,6 +38,7 @@ local function restore_original()
   changeDetectionOnCels = nil
   editAttachmentLayer = nil
 
+  app.sprite = originalLayer.sprite
   app.layer = originalLayer
   app.frame = originalFrame
   originalLayer = nil

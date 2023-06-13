@@ -76,7 +76,9 @@ function editAttachment.acceptChanges()
             local image = Image(ts:tile(i).image.spec)
             local pos = editAttachmentLayer:cel(i).position - attachmentOriginalPositions[i]
             image:drawImage(celImage, pos)
-            ts:tile(i).image = image
+            if not ts:tile(i).image:isEqual(image) then
+              ts:tile(i).image = image
+            end
           end
         end
       end

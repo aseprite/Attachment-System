@@ -1048,13 +1048,13 @@ end
 local function show_anchor_context_menu(anchorLayerId)
   local popup = Dialog{ parent=imi.dlg }
 
-  popup:menuItem{ text="Unlink",
+  popup:menuItem{ text="&Unlink",
                   onclick=function()
                     app.transaction("Unlink Anchor", function()
                       unlink_anchor(anchorLayerId)
                     end)
                   end}
-  popup:menuItem{ text="Swap Hierarchy",
+  popup:menuItem{ text="&Swap Hierarchy",
                   onclick=function()
                     app.transaction("Swap Hierarchy", function()
                       swap_hierarchy(anchorLayerId)
@@ -1074,12 +1074,12 @@ local function show_tile_context_menu(ts, ti, folders, folder, indexInFolder)
     focusedItem = nil
   end
 
-  popup:menuItem{ text="Align Anchors", onclick=commands.AlignAnchors }
+  popup:menuItem{ text="&Align Anchors", onclick=commands.AlignAnchors }
   popup:separator()
-  popup:menuItem{ text="&New Empty", onclick=commands.NewEmptyAttachment }
+  popup:menuItem{ text="Ne&w Empty", onclick=commands.NewEmptyAttachment }
   popup:menuItem{ text="Dupli&cate", onclick=commands.DuplicateAttachment }
   popup:separator()
-  popup:menuItem{ text="Highlight &Usage", onclick=commands.HighlightUsage }
+  popup:menuItem{ text="&Highlight Usage", onclick=commands.HighlightUsage }
   popup:menuItem{ text="Find &Next Usage", onclick=commands.FindNext }
   popup:menuItem{ text="Find &Prev Usage", onclick=commands.FindPrev }
   local repeatedTiOnBaseFolder = false
@@ -1296,15 +1296,15 @@ local function show_categories_selector(categories, activeTileset)
     end
     popup:separator()
   end
-  popup:menuItem{ text="New Category",
+  popup:menuItem{ text="&New Category",
                   onclick=function()
                     popup:close()
                     new_or_rename_category_dialog()
                     imi.repaint()
                   end }
-  popup:menuItem{ text="Rename Category", onclick=rename }
+  popup:menuItem{ text="&Rename Category", onclick=rename }
   if #categories > 1 then
-    popup:menuItem{ text="Delete Category", onclick=delete }
+    popup:menuItem{ text="&Delete Category", onclick=delete }
   end
   popup:showMenu()
 end
@@ -1376,34 +1376,34 @@ local function show_folder_context_menu(folders, folder)
   end
 
   local popup = Dialog{ parent=imi.dlg }
-  popup:menuItem{ text="Sort by Tile Index/ID", onclick=sortByIndex }
+  popup:menuItem{ text="&Sort by Tile Index/ID", onclick=sortByIndex }
   if not db.isBaseSetFolder(folder) then
     popup:separator()
-    popup:menuItem{ text="Rename Folder", onclick=rename }
-    popup:menuItem{ text="Delete Folder", onclick=delete }
+    popup:menuItem{ text="&Rename Folder", onclick=rename }
+    popup:menuItem{ text="&Delete Folder", onclick=delete }
   end
   popup:showMenu()
 end
 
 local function show_options(rc)
   local popup = Dialog{ parent=imi.dlg }
-  popup:menuItem{ text="Show Unused Attachment as Semitransparent",
+  popup:menuItem{ text="Show Unused Attachment as &Semitransparent",
                   onclick=commands.ShowUnusedTilesSemitransparent,
                   selected=pref.showUnusedTilesSemitransparent }
-  popup:menuItem{ text="Show Usage",
+  popup:menuItem{ text="Show &Usage",
                   onclick=commands.ShowUsage,
                   selected=pref.showTilesUsage }
-  popup:menuItem{ text="Show Tile ID/Index",
+  popup:menuItem{ text="Show Tile &ID/Index",
                   onclick=commands.ShowTilesID,
                   selected=pref.showTilesID }
   popup:separator()
-  popup:menuItem{ text="Capture Arrow Keys",
+  popup:menuItem{ text="Capture Arrow &Keys",
                   onclick=function()
                     pref.captureArrowKeys = not pref.captureArrowKeys
                   end,
                   selected=pref.captureArrowKeys }
   popup:separator()
-  popup:menuItem{ text="Reset Zoom", onclick=commands.ResetZoom }
+  popup:menuItem{ text="Reset &Zoom", onclick=commands.ResetZoom }
   popup:showMenu()
   imi.repaint()
 end

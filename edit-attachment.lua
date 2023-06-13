@@ -109,8 +109,8 @@ function editAttachment.startEditing(ti, afterEditing)
 
   local spr = app.sprite
   local ts = originalLayer.tileset
-  local refTileset = db.getBaseTileset(originalLayer)
-  local tileSize = refTileset.grid.tileSize
+  local tileSize = ts.grid.tileSize
+  local baseTileset = db.getBaseTileset(originalLayer)
   local defaultAnchorSample = 1
 
   tempSprite = Sprite(spr.width, spr.height, spr.colorMode)
@@ -124,7 +124,8 @@ function editAttachment.startEditing(ti, afterEditing)
       tempSprite:newEmptyFrame()
     end
 
-    local tilePosOnTempSprite = Point((tempSprite.width - tileSize.width)/2,
+    local tilePosOnTempSprite = Point(
+      (tempSprite.width - tileSize.width)/2,
       (tempSprite.height - tileSize.height)/2)
 
     -- Add faded parent tiles layer for reference
@@ -159,7 +160,7 @@ function editAttachment.startEditing(ti, afterEditing)
           parentImageIndex = defaultAnchorSample
           parentAnchorPos = defaultParentAnchor.position
         end
-        local ref = refTileset:tile(i).properties(PK).ref
+        local ref = baseTileset:tile(i).properties(PK).ref
         if not ref then
           ref = Point(tileSize.width/2, tileSize.height/2)
         end

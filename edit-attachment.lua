@@ -59,8 +59,7 @@ function editAttachment.acceptChanges()
   if not originalLayer then return end
 
   local ts = originalLayer.tileset
-  local refTileset = db.getBaseTileset(originalLayer)
-  local tileSize = refTileset.grid.tileSize
+  local tileSize = ts.grid.tileSize
 
   -- Restore original sprite and start a transaction to apply all
   -- attachment changes.
@@ -78,9 +77,6 @@ function editAttachment.acceptChanges()
             local pos = editAttachmentLayer:cel(i).position - attachmentOriginalPositions[i]
             image:drawImage(celImage, pos)
             ts:tile(i).image = image
-            if not refTileset:tile(i).properties(PK).ref then
-              refTileset:tile(i).properties(PK).ref = Point(tileSize.width/2, tileSize.height/2)
-            end
           end
         end
       end

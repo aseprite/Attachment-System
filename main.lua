@@ -1061,9 +1061,31 @@ local function swap_hierarchy(anchorLayerId)
   dlg:repaint()
 end
 
-local function show_anchor_context_menu(anchorLayerId)
+local function show_ref_context_menu(tile)
   local popup = Dialog{ parent=imi.dlg }
 
+  popup:menuItem{ text="&Delete RefPoint",
+                  onclick=function()
+                    app.transaction("Delete RefPoint", function()
+                      tile.properties(PK).ref = nil
+                    end)
+                  end}
+  popup:showMenu()
+  imi.dlg:repaint()
+end
+
+local function show_anchor_context_menu(anchorLayerId, tile, anchorI)
+  local popup = Dialog{ parent=imi.dlg }
+
+  popup:menuItem{ text="&Delete Anchor",
+                  onclick=function()
+                    app.transaction("Delete Anchor Point", function()
+                      local anchors = tile.properties(PK).anchors
+                      table.remove(anchors, anchorI)
+                      tile.properties(PK).anchors = anchors
+                    end)
+                  end}
+  popup:separator()
   popup:menuItem{ text="&Unlink",
                   onclick=function()
                     app.transaction("Unlink Anchor", function()
@@ -1686,6 +1708,9 @@ local function imi_ongui()
               }
             end
           end
+          imi.widget.oncontextmenu = function()
+            show_ref_context_menu(tile)
+          end
         end
         if tile.properties(PK).anchors then
           local anchors = tile.properties(PK).anchors
@@ -1718,7 +1743,7 @@ local function imi_ongui()
                 end
               end
               imi.widget.oncontextmenu = function()
-                show_anchor_context_menu(layerId)
+                show_anchor_context_menu(layerId, tile, i)
               end
               imi.popID()
             end

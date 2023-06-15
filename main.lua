@@ -639,50 +639,123 @@ local function set_active_tile(ti, layer)
   end)
 end
 
-local function flip_active_tile(flipType)
-  if activeTilemap then
-    local cel = activeTilemap:cel(app.activeFrame)
-    if cel and cel.image then
-      app.transaction("Flip Attachment", function()
-        local baseTileset = db.getBaseTileset(activeTilemap)
-        local ti = cel.image:getPixel(0, 0)
-        local tile = activeTilemap.tileset:tile(ti)
-        local copy = Image(tile.image)
-        copy:flip(flipType)
-        tile.image = copy
-
-        -- Flip from reference point and anchor points
-        local properties = baseTileset:tile(ti).properties(PK)
-        local ref = properties.ref
-        local anchors = properties.anchors
-        if ref then
-          if flipType == FlipType.HORIZONTAL then
-            ref.x = copy.width - ref.x
-          else
-            ref.y = copy.height - ref.y
-          end
-          cel.position = cel.position + properties.ref - ref
-          properties.ref = ref
-        end
-        if anchors then
-          for i = 1,#anchors do
-            local anchor = anchors[i]
-            if flipType == FlipType.HORIZONTAL then
-              anchor.position.x = copy.width - anchor.position.x
-            else
-              anchor.position.y = copy.height - anchor.position.y
-            end
-            anchors[i] = anchor
-          end
-          properties.anchors = anchors
-        end
-        baseTileset:tile(ti).properties(PK, properties)
-
-        imi.repaint()
-        app.refresh()
-      end)
-    end
+local function flip_type_to_orientation(flipType)
+  if flipType == FlipType.VERTICAL then
+    return "vertical"
+  else
+    return "horizontal"
   end
+end
+
+local function flip_attachment(flipType, cel, ignoreRefAsPivot)
+  local newImageId
+  assert(cel and cel.image)
+  if cel.layer.isTilemap then
+    local baseTileset = db.getBaseTileset(cel.layer)
+    local ti = cel.image:getPixel(0, 0)
+    local tile = cel.layer.tileset:tile(ti)
+    local copy = Image(tile.image)
+    copy:flip(flipType)
+    tile.image = copy
+    local tileImg = tile.image
+    newImageId = tileImg.id
+
+    -- Flip from reference point and anchor points
+    local properties = baseTileset:tile(ti).properties(PK)
+    local ref = properties.ref
+    local anchors = properties.anchors
+    if ref then
+      if flipType == FlipType.HORIZONTAL then
+        ref.x = copy.width - ref.x
+      else
+        ref.y = copy.height - ref.y
+      end
+      if not ignoreRefAsPivot then
+        cel.position = cel.position + properties.ref - ref
+      end
+      properties.ref = ref
+    end
+
+    if not ref or ignoreRefAsPivot then
+      local spr = cel.sprite
+      local center = Point(copy.width/2 - cel.position.x,
+                           copy.height/2 - cel.position.y)
+      local ref = Point(center)
+      if flipType == FlipType.HORIZONTAL then
+        ref.x = copy.width - ref.x
+      else
+        ref.y = copy.height - ref.y
+      end
+      cel.position = cel.position + center - ref
+    end
+
+    if anchors then
+      for i = 1,#anchors do
+        local anchor = anchors[i]
+        if flipType == FlipType.HORIZONTAL then
+          anchor.position.x = copy.width - anchor.position.x
+        else
+          anchor.position.y = copy.height - anchor.position.y
+        end
+        anchors[i] = anchor
+      end
+      properties.anchors = anchors
+    end
+    baseTileset:tile(ti).properties(PK, properties)
+  else
+    -- Simulate app.command.Flip
+    cel.image:flip(flipType)
+    newImageId = cel.image.id
+
+    local spr = cel.sprite
+    local pos = cel.position
+    if flipType == FlipType.HORIZONTAL then
+      pos.x = spr.width - cel.image.width - pos.x
+    else
+      pos.y = spr.height - cel.image.height - pos.y
+    end
+    cel.position = pos
+  end
+  return newImageId
+end
+
+local function flip_active_attachment(flipType)
+  app.transaction("Flip", function()
+    flip_attachment(flipType, app.cel)
+  end)
+  imi.repaint()
+  app.refresh()
+end
+
+local function flip_range(flipType)
+  app.transaction("Flip Range", function()
+    local oldSite = app.site
+    local range = app.range
+
+    local alreadyFlipped = {}
+    for _,editableImage in ipairs(range.editableImages) do
+      local cel = editableImage.cel
+      if cel.layer.isTilemap then
+        local ti = cel.image:getPixel(0, 0)
+        local tileImage = cel.layer.tileset:getTile(ti)
+        if not tileImage or alreadyFlipped[tileImage.id] then
+          -- Avoid flipping two times the same image
+        else
+          local newImageId = flip_attachment(
+            flipType, cel,
+            -- Flip ranges using the center of the
+            -- canvas, instead of the ref point
+            true)
+          alreadyFlipped[newImageId] = true
+        end
+      elseif not alreadyFlipped[cel.image.id] then
+        local newImageId = flip_attachment(flipType, cel)
+        alreadyFlipped[newImageId] = true
+      end
+    end
+  end)
+  imi.repaint()
+  app.refresh()
 end
 
 local function insert_guessed_parts(fromLayerId, ti, hierarchy)
@@ -2251,12 +2324,22 @@ local function App_beforecommand(ev)
 
   elseif ev.name == "Flip" and
      ev.params.target == "mask" and
+     app.sprite and
      app.sprite.selection.isEmpty and
-     activeTilemap then
-    if ev.params.orientation == "horizontal" then
-      flip_active_tile(FlipType.HORIZONTAL)
-    elseif ev.params.orientation == "vertical" then
-      flip_active_tile(FlipType.VERTICAL)
+     (activeTilemap or
+      (not app.range.isEmpty and app.sprite.tileManagementPlugin == PK)) then
+
+    local flipType
+    if ev.params.orientation == "vertical" then
+      flipType = FlipType.VERTICAL
+    else
+      flipType = FlipType.HORIZONTAL
+    end
+
+    if app.range.isEmpty then
+      flip_active_attachment(flipType)
+    else
+      flip_range(flipType)
     end
     ev.stopPropagation()
   end

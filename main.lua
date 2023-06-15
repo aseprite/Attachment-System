@@ -2208,7 +2208,23 @@ local function App_sitechange(ev)
 end
 
 local function App_beforecommand(ev)
-  if ev.name == "Flip" and
+  if ev.name == "MaskContent" and
+     app.sprite and
+     activeTilemap then
+
+    app.transaction("Select Content", function()
+      local tileImg = get_active_tile_image()
+      if tileImg then
+        local shrinkBounds = get_shrunken_bounds_of_image(tileImg)
+        local sel = Selection(shrinkBounds)
+        sel.origin = sel.origin + app.cel.position
+        app.sprite.selection = sel
+        app.refresh()
+      end
+    end)
+    ev.stopPropagation()
+
+  elseif ev.name == "Flip" and
      ev.params.target == "mask" and
      app.sprite.selection.isEmpty and
      activeTilemap then

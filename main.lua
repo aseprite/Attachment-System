@@ -1462,6 +1462,22 @@ local function show_folder_context_menu(folders, folder)
     imi.repaint()
   end
 
+  local function sortByUsage()
+    usage.calculateHistogram(activeTilemap)
+    table.sort(folder.items, function(a, b)
+      local ua = usage.getTileFreq(a.tile)
+      local ub = usage.getTileFreq(b.tile)
+      return ((ua > ub) or (ua == ub and a.tile < b.tile))
+    end)
+    for i=1,#folder.items do
+      folder.items[i].position = Point(i-1, 0)
+    end
+    app.transaction("Sort Folder", function()
+      activeTilemap.properties(PK).folders = folders
+    end)
+    imi.repaint()
+  end
+
   local function rename()
     folder = new_or_rename_folder_dialog(folder)
     app.transaction("Rename Folder", function()
@@ -1487,6 +1503,7 @@ local function show_folder_context_menu(folders, folder)
 
   local popup = Dialog{ parent=imi.dlg }
   popup:menuItem{ text="&Sort by Tile Index/ID", onclick=sortByIndex }
+  popup:menuItem{ text="Sort by &Usage", onclick=sortByUsage }
   if not db.isBaseSetFolder(folder) then
     popup:separator()
     popup:menuItem{ text="&Rename Folder", onclick=rename }

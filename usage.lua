@@ -16,7 +16,11 @@ function usage.isUnusedTile(ti)
 end
 
 function usage.getTileFreq(ti)
-  return tilesFreq[ti]
+  if tilesFreq[ti] then
+    return tilesFreq[ti]
+  else
+    return 0
+  end
 end
 
 function usage.calculateHistogram(layer)

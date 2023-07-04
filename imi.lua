@@ -1086,7 +1086,11 @@ function imi.beginViewport(size, itemSize)
       end
       dragStartViewportSize = Size(widget.bounds.size)
     elseif widget.hoverHBar or
-       imi.mouseButton == MouseButton.MIDDLE then
+      -- Can scroll with middle mouse button (in any place), or left
+      -- mouse button if it's above an empty area of the viewport
+      imi.mouseButton == MouseButton.MIDDLE or
+      (imi.mouseButton == MouseButton.LEFT and
+       imi.mouseWidgets[#imi.mouseWidgets] == widget) then
       widget.draggingHBar = true
 
       imi.capturedWidget = widget

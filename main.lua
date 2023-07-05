@@ -1451,6 +1451,7 @@ local function new_or_rename_folder_dialog(folder)
 end
 
 local function show_folder_context_menu(folders, folder)
+
   local function sortByIndex()
     table.sort(folder.items, function(a, b) return a.tile < b.tile end)
     for i=1,#folder.items do
@@ -1476,6 +1477,38 @@ local function show_folder_context_menu(folders, folder)
       activeTilemap.properties(PK).folders = folders
     end)
     imi.repaint()
+  end
+
+  local missingItems = {}
+  local function countMissingItems()
+    for ti = 1,#activeTilemap.tileset-1 do
+      local found = false
+      for i=1,#folder.items do
+        if folder.items[i].tile == ti then
+          found = true
+          break
+        end
+      end
+      if not found then
+        table.insert(missingItems, ti)
+      end
+    end
+  end
+
+  local function addMissingItems()
+    if #missingItems > 0 then
+      local lastPos = 0
+      for i=1,#folder.items do
+        lastPos = math.max(lastPos, folder.items[i].position.x+1)
+      end
+      for i,ti in ipairs(missingItems) do
+        table.insert(folder.items, { tile=ti, position=Point(lastPos, 0) })
+        lastPos = lastPos+1
+      end
+      app.transaction("Add Missing Items to Base Set", function()
+        activeTilemap.properties(PK).folders = folders
+      end)
+    end
   end
 
   local function rename()
@@ -1504,7 +1537,13 @@ local function show_folder_context_menu(folders, folder)
   local popup = Dialog{ parent=imi.dlg }
   popup:menuItem{ text="&Sort by Tile Index/ID", onclick=sortByIndex }
   popup:menuItem{ text="Sort by &Usage", onclick=sortByUsage }
-  if not db.isBaseSetFolder(folder) then
+  if db.isBaseSetFolder(folder) then
+    countMissingItems()
+    if #missingItems > 0 then
+      popup:separator()
+      popup:menuItem{ text="&Add Missing Items", onclick=addMissingItems }
+    end
+  else
     popup:separator()
     popup:menuItem{ text="&Rename Folder", onclick=rename }
     popup:menuItem{ text="&Delete Folder", onclick=delete }

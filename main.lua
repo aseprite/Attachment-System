@@ -2072,6 +2072,25 @@ local function Sprite_change(ev)
   end
 end
 
+local function Sprite_afteraddtile(ev)
+  local layer = ev.layer
+  local folders = layer.properties(PK).folders
+  local folder = db.getBaseSetFolder(layer, folders)
+  local ti = ev.tileIndex
+
+  local pos = find_empty_spot_position(folder)
+  table.insert(folder.items, { tile=ti, position=find_empty_spot_position(folder) })
+
+  -- We are inside a transaction in this event, so this property
+  -- change will be included in the undoable transaction.
+  layer.properties(PK).folders = folders
+
+  if ev.layer == activeTilemap then
+    calculate_shrunken_bounds(activeTilemap)
+  end
+  imi.repaint()
+end
+
 local function focus_active_attachment()
   local folders = activeTilemap.properties(PK).folders
   if not folders then
@@ -2298,6 +2317,7 @@ end
 local function unobserve_sprite()
   if observedSprite then
     observedSprite.events:off(Sprite_change)
+    observedSprite.events:off(Sprite_afteraddtile)
     observedSprite = nil
   end
 end
@@ -2307,6 +2327,9 @@ local function observe_sprite(spr)
   observedSprite = spr
   if observedSprite then
     observedSprite.events:on('change', Sprite_change)
+    if app.apiVersion >= 25 then
+      observedSprite.events:on('afteraddtile', Sprite_afteraddtile)
+    end
   end
 end
 
@@ -2401,6 +2424,7 @@ local function App_beforecommand(ev)
   end
 end
 
+-- Deprecated: used only if app.apiVersion < 25
 local function App_beforepaintemptytilemap()
   if activeTilemap then
     app.transaction("Set New Attachment", function()
@@ -2528,7 +2552,9 @@ function main.openDialog()
   app.events:on('sitechange', App_sitechange)
   if app.apiVersion >= 24 then
     app.events:on('beforecommand', App_beforecommand)
-    app.events:on('beforepaintemptytilemap', App_beforepaintemptytilemap)
+    if app.apiVersion < 25 then
+      app.events:on('beforepaintemptytilemap', App_beforepaintemptytilemap)
+    end
   end
   observe_sprite(app.activeSprite)
 end

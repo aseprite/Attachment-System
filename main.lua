@@ -176,7 +176,7 @@ local function get_folder_position_bounds(folder)
   return bounds
 end
 
-local function find_empty_spot_position(folder, ti)
+local function find_empty_spot_position(folder)
   -- TODO improve this when the viewport has more rows available
   local itemPos = Point(0, 0)
   while true do
@@ -917,12 +917,12 @@ end
 local function add_in_folder_and_base_set(folders, folder, ti)
   assert(activeTilemap)
   if folder then
-    table.insert(folder.items, { tile=ti, position=find_empty_spot_position(folder, ti) })
+    table.insert(folder.items, { tile=ti, position=find_empty_spot_position(folder) })
   end
   -- Add the tile in the Base Set folder (always)
   if not folder or not db.isBaseSetFolder(folder) then
     local baseSet = db.getBaseSetFolder(activeTilemap, folders)
-    table.insert(baseSet.items, { tile=ti, position=find_empty_spot_position(baseSet, ti) })
+    table.insert(baseSet.items, { tile=ti, position=find_empty_spot_position(baseSet) })
   end
   activeTilemap.properties(PK).folders = folders
 end

@@ -51,8 +51,8 @@ end
 
 function editAttachment.isEditing(sprite)
   return (originalLayer ~= nil and
-          originalLayer.sprite == sprite or
-          tempSprite == sprite)
+          (originalLayer.sprite == sprite or
+           tempSprite == sprite))
 end
 
 function editAttachment.acceptChanges()

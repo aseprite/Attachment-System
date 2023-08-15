@@ -25,6 +25,10 @@ local focusedItem = nil        -- Folder + item with the keyboard focus
 local focusFolderItem = nil
 local folderWidgets = {}  -- Visible widgets (viewports) representing folders
 
+-- Aliases
+local tileI = app.pixelColor.tileI
+local tileF = app.pixelColor.tileF
+
 -- Constants
 local PK = db.PK
 local WindowState = {
@@ -111,7 +115,7 @@ end
 
 local function remap_tiles_in_tilemap_layer_delete_index(tilemapLayer, deleteTi)
   for _,cel in ipairs(tilemapLayer.cels) do
-    local ti = cel.image:getPixel(0, 0)
+    local ti = tileI(cel.image:getPixel(0, 0))
     if ti >= deleteTi then
       local tilemapCopy = Image(cel.image)
       tilemapCopy:putPixel(0, 0, ti-1)
@@ -308,9 +312,9 @@ function main.alignAnchors(fromThisLayerId)
         if parentCel and parentCel.image and
            childCel and childCel.image then
           local parentTs = db.getBaseTileset(parent)
-          local parentTi = parentCel.image:getPixel(0, 0)
+          local parentTi = tileI(parentCel.image:getPixel(0, 0))
           local childTs = db.getBaseTileset(child)
-          local childTi = childCel.image:getPixel(0, 0)
+          local childTi = tileI(childCel.image:getPixel(0, 0))
 
           local refPoint = childTs:tile(childTi).properties(PK).ref
           if refPoint then
@@ -508,7 +512,7 @@ local function get_active_tile_image()
   if activeTilemap then
     local cel = activeTilemap:cel(app.activeFrame)
     if cel and cel.image then
-      local ti = cel.image:getPixel(0, 0)
+      local ti = tileI(cel.image:getPixel(0, 0))
       return activeTilemap.tileset:getTile(ti)
     end
   end
@@ -534,7 +538,7 @@ local function get_active_tile_index(layer, frame)
   if layer and layer.isTilemap then
     local cel = layer:cel(frame)
     if cel and cel.image then
-      return cel.image:getPixel(0, 0)
+      return tileI(cel.image:getPixel(0, 0))
     end
   end
   return nil
@@ -591,7 +595,7 @@ local function set_active_tile(ti, layer)
     -- Change tilemap tile if are not showing categories
     -- We use Image:drawImage() to get undo information
     if cel and cel.image then
-      local oldTi = cel.image:getPixel(0, 0)
+      local oldTi = tileI(cel.image:getPixel(0, 0))
       if oldTi then
         oldRefPoint = ts:tile(oldTi).properties(PK).ref
       end
@@ -652,7 +656,7 @@ local function flip_attachment(flipType, cel, ignoreRefAsPivot)
   assert(cel and cel.image)
   if cel.layer.isTilemap then
     local baseTileset = db.getBaseTileset(cel.layer)
-    local ti = cel.image:getPixel(0, 0)
+    local ti = tileI(cel.image:getPixel(0, 0))
     local tile = cel.layer.tileset:tile(ti)
     local copy = Image(tile.image)
     copy:flip(flipType)
@@ -736,7 +740,7 @@ local function flip_range(flipType)
     for _,editableImage in ipairs(range.editableImages) do
       local cel = editableImage.cel
       if cel.layer.isTilemap then
-        local ti = cel.image:getPixel(0, 0)
+        local ti = tileI(cel.image:getPixel(0, 0))
         local tileImage = cel.layer.tileset:getTile(ti)
         if not tileImage or alreadyFlipped[tileImage.id] then
           -- Avoid flipping two times the same image
@@ -787,7 +791,7 @@ local function insert_guessed_parts(fromLayerId, ti, hierarchy)
       for _,fr in ipairs(frames) do
         local cel = child:cel(fr)
         if cel and cel.image then
-          local partTi = cel.image:getPixel(0, 0)
+          local partTi = tileI(cel.image:getPixel(0, 0))
           if not histogram[partTi] then
             histogram[partTi] = 1
           else
@@ -1054,7 +1058,7 @@ function main.highlightUsage()
   local frames = {}
   for _,cel in ipairs(activeTilemap.cels) do
     if cel.image then
-      local celTi = cel.image:getPixel(0, 0)
+      local celTi = tileI(cel.image:getPixel(0, 0))
       if celTi == ti then
         table.insert(frames, cel.frameNumber)
       end
@@ -1583,7 +1587,7 @@ local function get_possible_attachments(point)
     if cel and cel.image and cel.bounds:contains(point) then
       -- Use original layer tileset to get shruken bounds its tiles
       local ts = layer.tileset
-      local ti = cel.image:getPixel(0, 0)
+      local ti = tileI(cel.image:getPixel(0, 0))
       local tileImg = ts:getTile(ti)
       local u = point - cel.position
       if get_shrunken_bounds_of_image(tileImg):contains(u) then
@@ -1605,12 +1609,33 @@ local function insert_joint(layerA, layerB, point)
     local tsB = db.getBaseTileset(layerB)
     local celA = layerA:cel(app.frame)
     local celB = layerB:cel(app.frame)
-    local tiA = celA.image:getPixel(0, 0)
-    local tiB = celB.image:getPixel(0, 0)
+    local tiA = tileI(celA.image:getPixel(0, 0))
+    local tiB = tileI(celB.image:getPixel(0, 0))
 
     set_anchor_point(tsA, tiA, idB, point - celA.position)
     set_ref_point(tsB, tiB, point - celB.position)
   end)
+end
+
+local function flip_active_tile_flags(label, flipFlag)
+  if not activeTilemap then return end
+  local cel = activeTilemap:cel(app.activeFrame)
+  if not cel then return end
+
+  app.transaction(
+    label,
+    function()
+      local t = cel.image:getPixel(0, 0)
+      local ti = tileI(t)
+      local tf = tileF(t)
+      local img = cel.image
+      local tilemapCopy = Image(img)
+      tf = tf ~ flipFlag
+      tilemapCopy:putPixel(0, 0, ti | tf)
+      cel.image:drawImage(tilemapCopy)
+    end)
+
+  app.refresh()
 end
 
 function main.newFolder()
@@ -1790,7 +1815,7 @@ local function imi_ongui()
       local cel = activeTilemap:cel(app.activeFrame)
       local ti = 0
       if cel and cel.image then
-        ti = cel.image:getPixel(0, 0)
+        ti = tileI(cel.image:getPixel(0, 0))
       end
       do
         local tileImg = ts:getTile(ti)
@@ -1811,6 +1836,18 @@ local function imi_ongui()
           end
           imi.widget = imageWidget
         end
+
+        -- Buttons to change flip horizontally/vertically
+        imi.sameLine = false
+        if imi.button("H") then
+          flip_active_tile_flags("Flip H", app.pixelColor.TILE_XFLIP)
+        end
+        imi.margin = 0
+        imi.sameLine = true
+        if imi.button("V") then
+          flip_active_tile_flags("Flip V", app.pixelColor.TILE_YFLIP)
+        end
+        imi.margin = 4*imi.uiScale
 
         -- Buttons to change points
         imi.sameLine = false
@@ -2105,7 +2142,7 @@ local function focus_active_attachment()
   local index = 1
   local cel = app.activeCel
   if cel then
-    local ti = cel.image:getPixel(0, 0)
+    local ti = tileI(cel.image:getPixel(0, 0))
     index = find_first_item_index_in_folder_by_tile(folder, ti)
     if index < 1 then
       index = 1

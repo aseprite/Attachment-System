@@ -131,6 +131,7 @@ function editAttachment.startEditing(ti, afterEditing)
     -- Add faded parent tiles layer for reference
     local parentLayer = db.findParentLayer(spr.layers, originalLayer)
     if parentLayer then
+      local tileI = app.pixelColor.tileI
       local defaultParentAnchor = db.findAnchorOnLayer(parentLayer, originalLayer, defaultAnchorSample)
       assert(defaultParentAnchor)
       local parentLayerOnTempSprite = tempSprite.layers[1]
@@ -147,7 +148,7 @@ function editAttachment.startEditing(ti, afterEditing)
           app.cel = usage.findNext(app.layer, app.frame.frameNumber, i)
 
           if parentLayer:cel(app.frame.frameNumber) then
-            parentImageIndex = parentLayer:cel(app.frame.frameNumber).image:getPixel(0, 0)
+            parentImageIndex = tileI(parentLayer:cel(app.frame.frameNumber).image:getPixel(0, 0))
             local parentAnchor = db.findAnchorOnLayer(parentLayer, originalLayer, parentImageIndex)
             if parentAnchor then
               parentAnchorPos = parentAnchor.position

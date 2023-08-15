@@ -27,8 +27,9 @@ function usage.calculateHistogram(layer)
   assert(layer)
   assert(layer.isTilemap)
   tilesFreq = {}
+  local tileI = app.pixelColor.tileI
   for _,cel in ipairs(layer.cels) do
-    local ti = cel.image:getPixel(0, 0)
+    local ti = tileI(cel.image:getPixel(0, 0))
     if tilesFreq[ti] == nil then
       tilesFreq[ti] = 1
     else
@@ -53,6 +54,7 @@ local function find_next_cel_templ(layer, iniFrame, ti, istep)
     isPrevious = function(f) return f <= iniFrame end
   end
 
+  local tileI = app.pixelColor.tileI
   local cels = layer.cels
   for i=istart,iend,istep do
     local cel = cels[i]
@@ -60,7 +62,7 @@ local function find_next_cel_templ(layer, iniFrame, ti, istep)
       -- Go to next/prev frame...
     elseif cel.image then
       -- Check if this is cel is an instance of the given attachment (ti)
-      local celTi = cel.image:getPixel(0, 0)
+      local celTi = tileI(cel.image:getPixel(0, 0))
       if celTi == ti then
         if isPrevious(cel.frameNumber) then
           prevMatch = cel

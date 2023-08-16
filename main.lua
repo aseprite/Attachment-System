@@ -1618,9 +1618,9 @@ local function insert_joint(layerA, layerB, point)
 end
 
 local function flip_active_tile_flags(label, flipFlag)
-  if not activeTilemap then return end
+  if not activeTilemap then return false end
   local cel = activeTilemap:cel(app.activeFrame)
-  if not cel then return end
+  if not cel then return false end
 
   app.transaction(
     label,
@@ -1636,6 +1636,7 @@ local function flip_active_tile_flags(label, flipFlag)
     end)
 
   app.refresh()
+  return true
 end
 
 function main.newFolder()
@@ -2458,6 +2459,21 @@ local function App_beforecommand(ev)
       flip_range(flipType)
     end
     ev.stopPropagation()
+
+  elseif ev.name == "ChangeBrush" and
+    (ev.params.change == "flip-x" or
+     ev.params.change == "flip-y") and
+    activeTilemap then
+
+    local used
+    if ev.params.change == "flip-x" then
+      used = flip_active_tile_flags("Flip H", app.pixelColor.TILE_XFLIP)
+    else
+      used = flip_active_tile_flags("Flip V", app.pixelColor.TILE_YFLIP)
+    end
+    if used then
+      ev.stopPropagation()
+    end
   end
 end
 

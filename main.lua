@@ -1863,6 +1863,7 @@ local function imi_ongui()
               app.editor:askPoint{
                 title="Change Ref Point",
                 point=tile.properties(PK).ref + origin,
+                decorate={ rulers=true, dimmed=true },
                 onclick=function(ev)
                   activeAskPoint = nil
                   app.transaction("Change Ref Point", function()
@@ -1896,6 +1897,7 @@ local function imi_ongui()
                   app.editor:askPoint{
                     title="Change Anchor Point for Layer " .. child.name,
                     point=anchors[i].position + origin,
+                    decorate={ rulers=true, dimmed=true },
                     onclick=function(ev)
                       activeAskPoint = nil
                       app.transaction("Change Anchor Point", function()

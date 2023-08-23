@@ -38,6 +38,7 @@ function commands.InsertJoint()
   app.editor:askPoint{
     title="Click a pixel to specify a joint between parts",
     point=initialPoint,
+    decorate={ rulers=true, dimmed=true },
     onclick=function(ev)
       main.setPossibleJoint(ev.point)
     end,

@@ -918,6 +918,45 @@ local function for_each_category_tileset(func)
   end
 end
 
+local function check_categories_consistency(actionName)
+  assert(activeTilemap)
+  local ok = true
+  local ntiles = -1
+  for_each_category_tileset(function(ts)
+    if ntiles < 0 then
+      ntiles = #ts
+    elseif ntiles ~= #ts then
+      ok = false
+    end
+  end)
+  if not ok then
+    local lines = { string.format("Inconsistent categories for layer \"%s\":",
+                                  activeTilemap.name) }
+    for_each_category_tileset(function(ts)
+      table.insert(lines, string.format("* Category=\"%s\", #attachments=%d", ts.name, #ts))
+    end)
+    table.insert(lines, "")
+    table.insert(lines, "The \"fix\" consists on adding missing attachment at the end of each category,")
+    table.insert(lines, "which might break the alignment of attachment between categories anyway.")
+    local result =
+      app.alert{ title="Inconsistent Categories",
+                 text=lines,
+                 buttons={"&Fix && " .. actionName, "&Cancel"} }
+
+    if result == 1 then
+      app.transaction("Fix Categories", function()
+        for_each_category_tileset(function(ts)
+            while #ts < ntiles do
+              app.sprite:newTile(ts)
+            end
+        end)
+      end)
+      ok = true
+    end
+  end
+  return ok
+end
+
 local function add_in_folder_and_base_set(folders, folder, ti)
   assert(activeTilemap)
   if folder then
@@ -945,6 +984,10 @@ function main.newEmptyAttachment()
       table.insert(auxAnchors, {layerId=anchors[i].layerId,
                                 position=defaultPos})
     end
+  end
+
+  if not check_categories_consistency("Create Empty Attachment") then
+    return
   end
 
   local tile
@@ -979,6 +1022,11 @@ function main.duplicateAttachment()
   local ti = get_active_tile_index()
   local folders, folder = get_active_folder()
   local origTile = ts:tile(ti)
+
+  if not check_categories_consistency("Duplicate Attachment") then
+    return
+  end
+
   app.transaction("Duplicate Attachment", function()
     local tile
     for_each_category_tileset(function(ts)
@@ -1031,11 +1079,25 @@ function main.deleteAttachment()
   if folder and (not db.isBaseSetFolder(folder) or
                  repeatedTiOnBaseFolder or
                  usage.isUnusedTile(ti)) then
+    -- True if we can call Sprite:deleteTile(), or false if we just
+    -- remove the tile from the folder.
+    local canDelete =
+      (db.isBaseSetFolder(folder) and
+       not repeatedTiOnBaseFolder and
+       usage.isUnusedTile(ti))
+
+    if canDelete then
+      if not check_categories_consistency("Delete Attachment") then
+        return
+      end
+    end
+
     app.transaction("Delete Attachment", function()
-      if db.isBaseSetFolder(folder) and
-        not repeatedTiOnBaseFolder and usage.isUnusedTile(ti) then
+      if canDelete then
         for_each_category_tileset(function(ts)
-            spr:deleteTile(ts, ti)
+            if ti < #ts then
+              spr:deleteTile(ts, ti)
+            end
         end)
 
         -- Remap tiles in all tilemaps
@@ -1043,6 +1105,7 @@ function main.deleteAttachment()
 
         remove_tiles_from_folders(folders, ti)
       else
+        -- Just remove from the folder
         remove_tile_from_folder_by_index(folder, indexInFolder)
       end
       activeTilemap.properties(PK).folders = folders

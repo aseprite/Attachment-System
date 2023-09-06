@@ -2565,14 +2565,20 @@ end
 function main.findNextAttachmentUsage()
   local ti = get_active_tile_index()
   if ti then
-    app.cel = usage.findNext(activeTilemap, app.frame.frameNumber, ti)
+    local newActiveCel = usage.findNext(activeTilemap, app.frame.frameNumber, ti)
+    if newActiveCel then
+      app.cel = newActiveCel
+    end
   end
 end
 
 function main.findPrevAttachmentUsage()
   local ti = get_active_tile_index()
   if ti then
-    app.cel = usage.findPrev(activeTilemap, app.frame.frameNumber, ti)
+    local newActiveCel = usage.findPrev(activeTilemap, app.frame.frameNumber, ti)
+    if newActiveCel then
+      app.cel = newActiveCel
+    end
   end
 end
 

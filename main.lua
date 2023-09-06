@@ -2191,6 +2191,13 @@ local function Sprite_afteraddtile(ev)
   if ev.layer == activeTilemap then
     calculate_shrunken_bounds(activeTilemap)
   end
+
+  for_each_category_tileset(function(ts)
+    if ts ~= layer.tileset then
+      app.sprite:newTile(ts)
+    end
+  end)
+
   imi.repaint()
 end
 

@@ -150,6 +150,13 @@ local function find_layer_by_name(layers, name)
 end
 
 local function find_tileset_by_name(spr, name)
+  -- Special case:
+  -- 'name' matches the default name of BaseTileset
+  if activeTilemap and activeTilemap.name == name and
+     db.getBaseTileset(activeTilemap).name == "" then
+    return db.getBaseTileset(activeTilemap)
+  end
+  -- Other cases:
   for i=1,#spr.tilesets do
     local tileset = spr.tilesets[i]
     if tileset and tileset.name == name then
@@ -1388,34 +1395,41 @@ local function new_or_rename_category_dialog(categoryTileset)
     :button{ id="cancel", text="Cancel" }
   popup:show()
   local data = popup.data
-  if data.ok and data.name ~= "" then
-    if categoryTileset then
-      app.transaction("Rename Category", function()
-        categoryTileset.name = data.name
-      end)
-    else
-      local spr = activeTilemap.sprite
+  local spr = activeTilemap.sprite
 
-      -- Check that we cannot create two tilesets with the same name
-      if find_tileset_by_name(spr, data.name) then
-        return app.alert("A category named '" .. data.name .. "' already exist. " ..
-                         "You cannot have two categories with the same name")
-      end
+  if not data.ok then
+    return
+  elseif data.name == "" then
+    return app.alert("Empty names are not allowed.")
+  end
 
-      local id = db.calculateNewCategoryID(spr)
-      app.transaction("New Category", function()
-        local cloned = spr:newTileset(activeTilemap.tileset)
-        cloned.properties(PK).id = id
-        cloned.name = data.name
-
-        local categories = activeTilemap.properties(PK).categories
-        if not categories then categories = {} end
-        table.insert(categories, id)
-        activeTilemap.properties(PK).categories = categories
-        activeTilemap.tileset = cloned
-        app.refresh()
-      end)
+  -- Check that we cannot create two tilesets with the same name
+  local ts = find_tileset_by_name(spr, data.name)
+  if ts then
+    if ts == categoryTileset then
+      return
     end
+    return app.alert("A category named '" .. data.name .. "' already exist. " ..
+                     "You cannot have two categories with the same name")
+  end
+  if categoryTileset then
+    app.transaction("Rename Category", function()
+      categoryTileset.name = data.name
+    end)
+  else
+    local id = db.calculateNewCategoryID(spr)
+    app.transaction("New Category", function()
+      local cloned = spr:newTileset(activeTilemap.tileset)
+      cloned.properties(PK).id = id
+      cloned.name = data.name
+
+      local categories = activeTilemap.properties(PK).categories
+      if not categories then categories = {} end
+      table.insert(categories, id)
+      activeTilemap.properties(PK).categories = categories
+      activeTilemap.tileset = cloned
+      app.refresh()
+    end)
   end
 end
 

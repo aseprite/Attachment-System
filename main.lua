@@ -17,7 +17,7 @@ local hasFlipFlags = (app.pixelColor.TILE_XFLIP ~= nil)
 
 -- The main window/dialog
 local dlg
-local title = "Attachment System"
+local title = "Attachment System v0.2.7" -- TODO add a way to get the package version
 local observedSprite
 local activeTilemap -- Active tilemap (nil if the active layer isn't a tilemap)
 local shrunkenBoundsCache = {} -- Cache of shrunken bounds

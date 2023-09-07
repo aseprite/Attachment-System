@@ -166,6 +166,19 @@ local function find_tileset_by_name(spr, name)
   return nil
 end
 
+local function find_folder_by_name(layer, name)
+  if layer then
+    local folders = layer.properties(PK).folders
+    for i=1,#folders do
+      local folder = folders[i]
+      if folder and folder.name == name then
+        return folder
+      end
+    end
+  end
+  return nil
+end
+
 local function get_folder_item_index_by_position(folder, position)
   for i=1,#folder.items do
     local itemPos = folder.items[i].position
@@ -1517,7 +1530,14 @@ local function new_or_rename_folder_dialog(folder)
   popup:show()
   local data = popup.data
   if data.ok and data.name ~= "" then
-    if folder then
+    local folderFound = find_folder_by_name(activeTilemap, data.name)
+    if folderFound and folder and folderFound.name == folder.name then
+      return
+    elseif folderFound then
+      app.alert("A folder named '" .. data.name .. "' already exist. " ..
+                "You cannot have two folders with the same name")
+      return nil
+    elseif folder then
       folder.name = data.name
       return folder
     else

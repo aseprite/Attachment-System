@@ -12,6 +12,9 @@ local usage = require 'usage'
 local editAttachment = require 'edit-attachment'
 local main = {}
 
+-- Check if the API to handle flip flags for tiles is available
+local hasFlipFlags = (app.pixelColor.TILE_XFLIP ~= nil)
+
 -- The main window/dialog
 local dlg
 local title = "Attachment System"
@@ -1916,16 +1919,18 @@ local function imi_ongui()
         end
 
         -- Buttons to change flip horizontally/vertically
-        imi.sameLine = false
-        if imi.button("H") then
-          flip_active_tile_flags("Flip H", app.pixelColor.TILE_XFLIP)
+        if hasFlipFlags then
+          imi.sameLine = false
+          if imi.button("H") then
+            flip_active_tile_flags("Flip H", app.pixelColor.TILE_XFLIP)
+          end
+          imi.margin = 0
+          imi.sameLine = true
+          if imi.button("V") then
+            flip_active_tile_flags("Flip V", app.pixelColor.TILE_YFLIP)
+          end
+          imi.margin = 4*imi.uiScale
         end
-        imi.margin = 0
-        imi.sameLine = true
-        if imi.button("V") then
-          flip_active_tile_flags("Flip V", app.pixelColor.TILE_YFLIP)
-        end
-        imi.margin = 4*imi.uiScale
 
         -- Buttons to change points
         imi.sameLine = false
@@ -2546,7 +2551,8 @@ local function App_beforecommand(ev)
     end
     ev.stopPropagation()
 
-  elseif ev.name == "ChangeBrush" and
+  elseif hasFlipFlags and
+    ev.name == "ChangeBrush" and
     (ev.params.change == "flip-x" or
      ev.params.change == "flip-y") and
     activeTilemap then

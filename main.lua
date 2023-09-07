@@ -2545,7 +2545,9 @@ local function App_beforecommand(ev)
     end
 
     if app.range.isEmpty then
-      flip_active_attachment(flipType)
+      if app.cel then
+        flip_active_attachment(flipType)
+      end
     else
       flip_range(flipType)
     end
